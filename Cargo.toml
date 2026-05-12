@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "crates/polylab-core",
+    "crates/polylab-renderer",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["PolyLab Contributors"]
+license = "MIT"
+
+[workspace.dependencies]
+# Shared dependencies between crates
+glam = "0.27"  # 3D math (vectors, matrices)

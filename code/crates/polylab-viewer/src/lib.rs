@@ -4,6 +4,10 @@
 
 // Only compile for WASM target
 #[cfg(target_arch = "wasm32")]
+mod constants;
+#[cfg(target_arch = "wasm32")]
+mod webgpu_context;
+#[cfg(target_arch = "wasm32")]
 mod pipeline;
 #[cfg(target_arch = "wasm32")]
 mod renderer;
@@ -16,6 +20,9 @@ use renderer::Renderer;
 use wasm_bindgen::prelude::*;
 
 /// Main viewer handle exposed to JavaScript
+///
+/// Wraps Renderer and RenderPipeline. Entry point for WASM API.
+/// Created via `ViewerHandle.create(canvas_id)` in JS.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct ViewerHandle {
@@ -27,10 +34,12 @@ pub struct ViewerHandle {
 #[wasm_bindgen]
 impl ViewerHandle {
     /// Create a new viewer attached to the given canvas element
-    /// Note: This is not a constructor to avoid wasm-bindgen async constructor issues
+    ///
+    /// Initializes WebGPU context and creates render pipeline.
+    /// Call from JS: `await ViewerHandle.create('canvas-id')`
     #[wasm_bindgen]
     pub async fn create(canvas_id: &str) -> Result<ViewerHandle, JsValue> {
-        // Setup panic hook for better error messages
+        // Setup panic hook for better error messages in browser console
         console_error_panic_hook::set_once();
 
         // Get canvas element from DOM
@@ -38,7 +47,7 @@ impl ViewerHandle {
         let document = window.document().ok_or("No document found")?;
         let canvas = document
             .get_element_by_id(canvas_id)
-            .ok_or(format!("Canvas element '{}' not found", canvas_id))?;
+            .ok_or(format!("Canvas '{}' not found", canvas_id))?;
         let canvas: web_sys::HtmlCanvasElement = canvas
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .map_err(|_| "Element is not a canvas")?;
@@ -49,12 +58,15 @@ impl ViewerHandle {
             .map_err(|e| JsValue::from_str(&e))?;
 
         // Create render pipeline
-        let pipeline = create_render_pipeline(&renderer.device, renderer.config.format);
+        let pipeline = create_render_pipeline(renderer.device(), renderer.surface_format());
 
         Ok(ViewerHandle { renderer, pipeline })
     }
 
     /// Render a frame
+    ///
+    /// Call this every frame from requestAnimationFrame in JS.
+    /// Returns error if surface is lost (needs resize).
     #[wasm_bindgen]
     pub fn render(&self) -> Result<(), JsValue> {
         self.renderer
@@ -63,6 +75,8 @@ impl ViewerHandle {
     }
 
     /// Resize the viewer
+    ///
+    /// Call when canvas/window size changes.
     #[wasm_bindgen]
     pub fn resize(&mut self, width: u32, height: u32) {
         self.renderer.resize(width, height);

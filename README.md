@@ -4,7 +4,7 @@
 
 Personal 3D graphics experimentation project based on Rust + WebGPU, with long-term goal of progressive mesh compression.
 
-📖 **See [VISION.md](VISION.md) for full context and roadmap**
+📖 **See [docs/project/VISION.md](docs/project/VISION.md) for full context and roadmap**
 
 ---
 
@@ -12,12 +12,17 @@ Personal 3D graphics experimentation project based on Rust + WebGPU, with long-t
 
 ```
 PolyLab/
-├── crates/
-│   ├── polylab-core/       # 3D structures, .obj parser (Rust)
-│   └── polylab-viewer/     # WebGPU rendering engine (Rust)
-├── app/
-│   └── web/                # TypeScript + Vite web app
-└── docs/                   # Documentation
+├── docs/                       # 📚 Documentation
+│   ├── project/                # Vision, roadmap, architecture
+│   └── phases/                 # Phase-specific docs
+├── scripts/                    # 🔧 Build and utility scripts
+├── code/                       # 💻 Source code
+│   ├── crates/                 # Rust libraries
+│   │   ├── polylab-core/       # 3D data structures
+│   │   └── polylab-viewer/     # WebGPU rendering engine
+│   └── app/
+│       └── web/                # TypeScript + Vite web app
+└── target/                     # Build artifacts
 ```
 
 ---
@@ -26,9 +31,9 @@ PolyLab/
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) (stable) ✅ Already installed
+- [Rust](https://www.rust-lang.org/tools/install) (stable) ✅
 - [Node.js](https://nodejs.org/) (v20+) ✅
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/) (for WebAssembly builds)
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
 
 ### Install wasm-pack
 
@@ -40,7 +45,7 @@ curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
 **Easy way** (automated script):
 ```bash
-./run-phase1.sh
+./scripts/run-phase1.sh
 ```
 
 **Manual way**:
@@ -49,12 +54,12 @@ curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 rustup target add wasm32-unknown-unknown
 
 # 2. Build viewer to WASM
-cd crates/polylab-viewer
+cd code/crates/polylab-viewer
 wasm-pack build --target web --dev
-cd ../..
+cd ../../..
 
 # 3. Launch web app
-cd app/web
+cd code/app/web
 npm install
 npm run dev
 ```

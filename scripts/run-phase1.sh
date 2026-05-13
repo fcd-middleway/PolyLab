@@ -3,6 +3,9 @@
 
 set -e
 
+# Navigate to project root (script is in scripts/)
+cd "$(dirname "$0")/.."
+
 echo "🦀 PolyLab Phase 1.1 - WebGPU Hello World"
 echo "========================================="
 echo ""
@@ -22,15 +25,15 @@ if ! rustup target list | grep -q "wasm32-unknown-unknown (installed)"; then
 fi
 
 echo "🔨 Building polylab-viewer (Rust → WASM)..."
-cd crates/polylab-viewer
+cd code/crates/polylab-viewer
 wasm-pack build --target web --dev
-cd ../..
+cd ../../..
 
 echo ""
 echo "✅ WASM build complete!"
 echo ""
 echo "📦 Installing npm dependencies..."
-cd app/web
+cd code/app/web
 npm install
 
 echo ""

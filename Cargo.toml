@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "crates/polylab-core",
-    "crates/polylab-renderer",
+    "crates/polylab-viewer",
+    "sandbox",
 ]
 resolver = "2"
 

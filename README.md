@@ -14,7 +14,7 @@ Personal 3D graphics experimentation project based on Rust + WebGPU, with long-t
 PolyLab/
 ├── crates/
 │   ├── polylab-core/       # 3D structures, .obj parser (Rust)
-│   └── polylab-renderer/   # WebGPU wrapper (Rust)
+│   └── polylab-viewer/     # WebGPU rendering engine (Rust)
 ├── app/
 │   └── web/                # TypeScript + Vite web app
 └── docs/                   # Documentation
@@ -26,28 +26,54 @@ PolyLab/
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) (stable)
-- [Node.js](https://nodejs.org/) (v20+)
+- [Rust](https://www.rust-lang.org/tools/install) (stable) ✅ Already installed
+- [Node.js](https://nodejs.org/) (v20+) ✅
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/) (for WebAssembly builds)
 
-### 1️⃣ Test Rust compilation
+### Install wasm-pack
 
 ```bash
-# Compile all crates
-cargo build
-
-# Run tests
-cargo test
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 ```
 
-### 2️⃣ Launch web app
+### Phase 1.1 - WebGPU Hello World 🎬
 
+**Easy way** (automated script):
 ```bash
+./run-phase1.sh
+```
+
+**Manual way**:
+```bash
+# 1. Add WASM target
+rustup target add wasm32-unknown-unknown
+
+# 2. Build viewer to WASM
+cd crates/polylab-viewer
+wasm-pack build --target web --dev
+cd ../..
+
+# 3. Launch web app
 cd app/web
 npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Open [http://localhost:5173](http://localhost:5173) - you should see a **colored triangle**! 🎉
+
+---
+
+## 🧪 Testing Rust Crates
+
+### Compile all crates
+
+```bash
+# Compile everything
+cargo build
+
+# Run tests
+cargo test
+```
 
 ---
 

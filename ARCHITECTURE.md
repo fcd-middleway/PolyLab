@@ -22,10 +22,22 @@ PolyLab/
 │   │   └── src/
 │   │       ├── lib.rs            # Library entry point
 │   │       └── mesh.rs           # Mesh module
-│   └── polylab-renderer/         # Crate #2: Rendering logic
-│       ├── Cargo.toml
-│       └── src/lib.rs
-├── app/web/                      # TypeScript web application
+│   ├── polylab-viewer/           # Crate #2: Rendering engine
+│   │   ├── Cargo.toml
+│   │   └── src/lib.rs
+│   ├── polylab-perlin/           # Crate #3: Terrain generation
+│   │   └── ...
+│   ├── polylab-rover/            # Crate #4: Stereo vision
+│   │   └── ...
+│   └── polylab-compression/      # Crate #5: Mesh compression
+│       └── ...
+├── app/web/                      # TypeScript application
+│   ├── src/
+│   │   ├── core/                 # ProjectManager, types
+│   │   ├── projects/             # PerlinProject, RoverProject, etc.
+│   │   ├── ui/                   # Menu, Toolbar, Canvas
+│   │   └── main.ts
+│   └── index.html
 ├── sandbox/                      # Your Rust learning experiments (git-ignored)
 └── docs/                         # Documentation
 ```
@@ -63,48 +75,137 @@ members = [
 ## 📚 Our Crates Explained
 
 ### `polylab-core`
-**Purpose**: Core 3D data structures and algorithms
+**Purpose**: Core 3D data structures and utilities
 
 **Contains:**
 - `Mesh`, `Vertex`, `Face` types
-- .obj parser (Week 2)
-- Compression algorithms (later)
-- Math utilities
+- .obj/.stl parser
+- Math utilities (when needed)
 
 **Why separate?**
-- Reusable in both web and desktop apps
-- Can be compiled to WebAssembly
-- Pure logic, no rendering code
+- Shared foundation for all other crates
+- Pure data structures, no logic
+- Can be used standalone
 
-### `polylab-renderer`
-**Purpose**: WebGPU rendering wrapper
+### `polylab-viewer`
+**Purpose**: 3D rendering engine (WebGPU wrapper)
 
 **Contains:**
-- WebGPU initialization
-- Shader management
-- Camera logic
-- Rendering pipeline
+- WebGPU initialization and context
+- Shader management (WGSL)
+- Camera system (orbit, FPS)
+- Mesh and point cloud rendering
+- Pure rendering, no UI, no business logic
 
 **Why separate?**
-- Clean separation of concerns (data vs rendering)
-- Could swap renderer without changing core
-- Easier to test in isolation
+- Reusable rendering engine (library)
+- Could be used in other projects
+- Clean separation: rendering vs logic
+
+### `polylab-perlin`
+**Purpose**: Procedural terrain generation
+
+**Contains:**
+- Perlin noise algorithm
+- Heightmap generation
+- Mesh generation from heightmap
+- Pure logic, no rendering
+
+**Why separate?**
+- Self-contained module
+- Could generate terrain for other purposes
+- Easy to test without UI/rendering
+
+### `polylab-rover`
+**Purpose**: Stereoscopic vision and 3D reconstruction
+
+**Contains:**
+- Stereo camera simulation
+- Disparity calculation (stereo matching)
+- Point cloud generation from disparities
+- Pure logic, no rendering
+
+**Why separate?**
+- Independent vision processing module
+- Could be used for real camera inputs
+- Research-oriented component
+
+### `polylab-compression`
+**Purpose**: Progressive mesh compression (PhD work)
+
+**Contains:**
+- Mesh compression algorithms
+- Progressive encoding/decoding
+- Quality metrics (PSNR, geometric error)
+- Pure logic, no rendering
+
+**Why separate?**
+- The crown jewel of the project
+- Could be published as standalone lib
+- Academic/research component
 
 ## 🔄 How Crates Work Together
 
+**Three-layer architecture**:
+
 ```
-polylab-renderer  →  depends on  →  polylab-core
-       ↓                                  ↓
-  Rendering logic              Data structures & parsing
+┌─────────────────────────────────────────┐
+│         APP (TypeScript)                │
+│  - Orchestrates projects                │
+│  - Manages UI (menus, controls)         │
+│  - Glue code between layers             │
+└───────┬─────────────────────────────────┘
+        │ imports WASM
+        ↓
+┌───────────────────────────────────────────┐
+│  polylab-viewer (Rust → WASM)            │
+│  - Receives mesh/point cloud data       │
+│  - Renders to canvas                    │
+│  - Handles camera controls              │
+└───────┬─────────────────────────────────┘
+        │ uses
+        ↓
+┌───────────────────────────────────────────┐
+│  polylab-core (Rust → WASM)              │
+│  - Mesh data structures                  │
+│  - Shared by all modules                 │
+└─────────────────────────────────────────┘
+
+        ┌─────────────────────────────────┐
+        │  Modules (Rust → WASM)         │
+        │  - polylab-perlin              │
+        │  - polylab-rover               │
+        │  - polylab-compression         │
+        │  Each generates data for viewer│
+        └─────────────────────────────────┘
 ```
 
-In `crates/polylab-renderer/Cargo.toml`:
+**Example flow** (Perlin project):
+
+1. **User action**: Clicks "New Perlin Project" in app
+2. **App layer**: Creates `PerlinProject` instance
+3. **Module layer**: Calls `polylab-perlin` (WASM) to generate terrain mesh
+4. **Viewer layer**: Passes mesh to `polylab-viewer` (WASM) for rendering
+5. **App layer**: Displays UI controls (sliders for octaves, scale, etc.)
+6. **User tweaks params** → Loop back to step 3
+
+**Dependencies**:
+```
+polylab-viewer  →  depends on  →  polylab-core
+polylab-perlin  →  depends on  →  polylab-core
+polylab-rover   →  depends on  →  polylab-core
+polylab-compression → depends on → polylab-core
+
+app (TypeScript) → imports all via WASM
+```
+
+In each module's `Cargo.toml`:
 ```toml
 [dependencies]
 polylab-core = { path = "../polylab-core" }
 ```
 
-This creates a **local dependency** between crates.
+This creates **local dependencies** between crates, all managed by the workspace.
 
 ## 📝 Summary
 

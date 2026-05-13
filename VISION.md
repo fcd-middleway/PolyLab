@@ -76,16 +76,49 @@ During my PhD in computer graphics, I worked on **progressive 3D mesh compressio
 
 ## 📐 Target Architecture
 
+**Three-layer architecture** for clean separation of concerns:
+
+```
+┌─────────────────────────────────────────┐
+│         APP (Orchestration + UI)        │  ← TypeScript
+│  - Project management                   │
+│  - UI (menus, controls, toolbars)       │
+│  - Glue between viewer and modules      │
+└───────────────┬─────────────────────────┘
+                │ uses
+┌───────────────▼─────────────────────────┐
+│      VIEWER (Rendering Engine)          │  ← Rust → WASM
+│  - WebGPU wrapper                       │
+│  - Camera system (orbit, FPS)           │
+│  - Mesh & point cloud rendering         │
+└───────────────┬─────────────────────────┘
+                │ renders
+┌───────────────▼─────────────────────────┐
+│       MODULES (Business Logic)          │  ← Rust → WASM
+│  - polylab-perlin    (terrain gen)      │
+│  - polylab-rover     (stereo vision)    │
+│  - polylab-compression (progressive)    │
+└─────────────────────────────────────────┘
+```
+
+**File structure**:
 ```
 PolyLab/
 ├── crates/
-│   ├── polylab-core/       # 3D structures, .obj parser, compression algo
-│   ├── polylab-renderer/   # WebGPU wrapper, shader management
-│   └── polylab-math/       # Vectors, matrices, transformations
+│   ├── polylab-core/         # 3D data structures, parsers
+│   ├── polylab-viewer/       # Rendering engine (WebGPU)
+│   ├── polylab-perlin/       # Procedural terrain generation
+│   ├── polylab-rover/        # Stereoscopic vision
+│   └── polylab-compression/  # Progressive mesh compression
 ├── app/
-│   └── web/                # TypeScript + WebAssembly app
-├── desktop/                # Tauri app (future)
-└── docs/                   # Technical documentation
+│   └── web/
+│       ├── src/
+│       │   ├── core/         # ProjectManager, types
+│       │   ├── projects/     # PerlinProject, RoverProject, etc.
+│       │   ├── ui/           # Menu, Toolbar, Canvas
+│       │   └── main.ts
+│       └── index.html
+└── docs/                     # Technical documentation
 ```
 
 ---

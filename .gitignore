@@ -2,6 +2,10 @@
 /target
 Cargo.lock
 
+# WASM build artifacts
+**/pkg/
+**/*.wasm
+
 # Sandbox (learning experiments)
 /sandbox
 

@@ -1,0 +1,57 @@
+/**
+ * Header styles
+ */
+
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: var(--bg-secondary);
+    border-bottom: 2px solid var(--border-color);
+    box-shadow: 0 2px 10px var(--shadow);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo {
+    font-size: 28px;
+}
+
+.title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.header-right {
+    display: flex;
+    gap: 8px;
+}
+
+.icon-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.icon-btn:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    transform: translateY(-1px);
+}
+
+.icon-btn .icon {
+    font-size: 18px;
+}

@@ -109,10 +109,12 @@ impl App {
         // Create renderer using native backend
         let renderer = polylab_viewer::Renderer::new_native(window).await?;
 
-        // Create render pipeline
+        // Create render pipeline with bind group layout
+        let bind_group_layout = renderer.bind_group_layout();
         let pipeline = polylab_viewer::create_render_pipeline(
             renderer.device(),
             renderer.surface_format(),
+            &bind_group_layout,
         );
 
         Ok(AppViewer { renderer, pipeline })

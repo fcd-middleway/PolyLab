@@ -54,8 +54,13 @@ impl ViewerHandle {
             .await
             .map_err(|e| JsValue::from_str(&e))?;
 
-        // Create render pipeline
-        let pipeline = create_render_pipeline(renderer.device(), renderer.surface_format());
+        // Create render pipeline with bind group layout
+        let bind_group_layout = renderer.bind_group_layout();
+        let pipeline = create_render_pipeline(
+            renderer.device(),
+            renderer.surface_format(),
+            &bind_group_layout,
+        );
 
         Ok(ViewerHandle { renderer, pipeline })
     }

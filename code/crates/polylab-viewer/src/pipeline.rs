@@ -12,6 +12,7 @@ use wgpu;
 pub fn create_render_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
+    bind_group_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
     // Shader module - compiled WGSL code
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -20,10 +21,10 @@ pub fn create_render_pipeline(
     });
 
     // Pipeline layout - defines bind groups (uniforms, textures)
-    // Empty for now - triangle positions hardcoded in shader
+    // Now includes view uniforms for aspect ratio
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Render Pipeline Layout"),
-        bind_group_layouts: &[],
+        bind_group_layouts: &[Some(bind_group_layout)],
         immediate_size: 0,
     });
 

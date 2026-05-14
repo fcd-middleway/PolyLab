@@ -17,6 +17,8 @@ use std::sync::Arc;
 /// Holds a reference to the WebGPU context and manages per-frame rendering.
 pub struct Renderer {
     context: WebGpuContext,
+    view_uniform_buffer: wgpu::Buffer,
+    view_bind_group: wgpu::BindGroup,
 }
 
 impl Renderer {
@@ -24,14 +26,93 @@ impl Renderer {
     #[cfg(target_arch = "wasm32")]
     pub async fn new(canvas: web_sys::HtmlCanvasElement) -> Result<Self, String> {
         let context = WebGpuContext::new(canvas).await?;
-        Ok(Self { context })
+        
+        // Create uniform buffer for aspect ratio
+        let aspect_ratio = context.size.0 as f32 / context.size.1 as f32;
+        let view_uniform_buffer = Self::create_view_uniform_buffer(&context.device, aspect_ratio);
+        
+        // Create bind group layout
+        let bind_group_layout = Self::create_bind_group_layout(&context.device);
+        
+        // Create bind group
+        let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer);
+        
+        Ok(Self { 
+            context,
+            view_uniform_buffer,
+            view_bind_group,
+        })
     }
 
     /// Create renderer from a winit window (Desktop only)
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn new_native(window: Arc<winit::window::Window>) -> Result<Self, String> {
         let context = WebGpuContext::new_native(window).await?;
-        Ok(Self { context })
+        
+        // Create uniform buffer for aspect ratio
+        let aspect_ratio = context.size.0 as f32 / context.size.1 as f32;
+        let view_uniform_buffer = Self::create_view_uniform_buffer(&context.device, aspect_ratio);
+        
+        // Create bind group layout
+        let bind_group_layout = Self::create_bind_group_layout(&context.device);
+        
+        // Create bind group
+        let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer);
+        
+        Ok(Self { 
+            context,
+            view_uniform_buffer,
+            view_bind_group,
+        })
+    }
+
+    /// Create bind group layout for view uniforms
+    fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("View Bind Group Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        })
+    }
+
+    /// Create uniform buffer with initial aspect ratio
+    fn create_view_uniform_buffer(device: &wgpu::Device, aspect_ratio: f32) -> wgpu::Buffer {
+        use wgpu::util::DeviceExt;
+        
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("View Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[aspect_ratio]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        })
+    }
+
+    /// Create bind group
+    fn create_bind_group(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        buffer: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("View Bind Group"),
+            layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        })
+    }
+
+    /// Get bind group layout (needed for pipeline creation)
+    pub fn bind_group_layout(&self) -> wgpu::BindGroupLayout {
+        Self::create_bind_group_layout(&self.context.device)
     }
 
     /// Get device reference (for creating pipelines, buffers, etc.)
@@ -97,6 +178,7 @@ impl Renderer {
             });
 
             render_pass.set_pipeline(pipeline);
+            render_pass.set_bind_group(0, &self.view_bind_group, &[]);
             render_pass.draw(
                 0..constants::TRIANGLE_VERTEX_COUNT,
                 0..constants::INSTANCE_COUNT,
@@ -114,6 +196,14 @@ impl Renderer {
 
     /// Resize the surface (e.g., when browser window changes)
     pub fn resize(&mut self, new_width: u32, new_height: u32) {
+        
+        // Update aspect ratio uniform
+        let aspect_ratio = new_width as f32 / new_height as f32;
+        self.context.queue.write_buffer(
+            &self.view_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[aspect_ratio]),
+        );
         self.context.resize(new_width, new_height);
     }
 }

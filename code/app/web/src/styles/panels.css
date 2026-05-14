@@ -1,0 +1,63 @@
+/**
+ * Panel styles (MeshPanel and DetailsPanel)
+ */
+
+.mesh-panel {
+    width: 220px;
+    border-right: 1px solid var(--border-color);
+}
+
+.details-panel {
+    width: 220px;
+    border-left: 1px solid var(--border-color);
+}
+
+/* Mesh list item */
+.mesh-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.mesh-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.mesh-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.mesh-name {
+    flex: 1;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Detail rows */
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
+    color: var(--text-secondary);
+}
+
+.detail-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}

@@ -154,17 +154,37 @@ async function main() {
                     // Call WASM function to load mesh
                     viewer.load_mesh(objContent);
                     
-                    // Get mesh info from viewer
-                    const meshInfo = viewer.mesh_info();
-                    const [vertices, triangles] = meshInfo;
+                    // Get detailed mesh info from viewer
+                    const details = viewer.mesh_details();
+                    const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
                     
-                    ui.statusBar.updateStats({ 
-                        status: `✅ Loaded ${filename}`,
-                        vertices,
-                        triangles
+                    // Add mesh to MeshPanel
+                    const meshId = `mesh-${Date.now()}`;
+                    ui.meshPanel.addMesh({
+                        id: meshId,
+                        name: filename,
+                        vertices: Math.round(vertices),
+                        triangles: Math.round(triangles),
+                        visible: true
                     });
                     
-                    console.log(`[PolyLab] Loaded mesh: ${vertices} vertices, ${triangles} triangles`);
+                    // Update DetailsPanel with dimensions
+                    ui.detailsPanel.updateDetails({
+                        vertices: Math.round(vertices),
+                        triangles: Math.round(triangles),
+                        sizeX,
+                        sizeY,
+                        sizeZ
+                    });
+                    
+                    // Update status bar
+                    ui.statusBar.updateStats({ 
+                        status: `✅ Loaded ${filename}`,
+                        vertices: Math.round(vertices),
+                        triangles: Math.round(triangles)
+                    });
+                    
+                    console.log(`[PolyLab] Loaded mesh: ${Math.round(vertices)} vertices, ${Math.round(triangles)} triangles, size: [${sizeX.toFixed(2)}, ${sizeY.toFixed(2)}, ${sizeZ.toFixed(2)}]`);
                 } catch (error) {
                     const errorMsg = error instanceof Error ? error.message : String(error);
                     ui.statusBar.updateStats({ status: `❌ ${errorMsg}` });

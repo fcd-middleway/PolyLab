@@ -21,6 +21,7 @@ pub struct Renderer {
     view_uniform_buffer: wgpu::Buffer,
     view_bind_group: wgpu::BindGroup,
     current_mesh: MeshGPU,
+    current_mesh_cpu: Option<polylab_core::Mesh>,
 }
 
 impl Renderer {
@@ -47,6 +48,7 @@ impl Renderer {
             view_uniform_buffer,
             view_bind_group,
             current_mesh,
+            current_mesh_cpu: None,
         })
     }
 
@@ -73,6 +75,7 @@ impl Renderer {
             view_uniform_buffer,
             view_bind_group,
             current_mesh,
+            current_mesh_cpu: None,
         })
     }
 
@@ -141,6 +144,7 @@ impl Renderer {
     /// Call this after parsing an OBJ file to display the loaded mesh.
     pub fn set_mesh(&mut self, mesh: polylab_core::Mesh) {
         self.current_mesh = MeshGPU::from_mesh(&self.context.device, &mesh);
+        self.current_mesh_cpu = Some(mesh);
     }
 
     /// Get the current mesh vertex and triangle counts
@@ -150,6 +154,21 @@ impl Renderer {
         let vertex_count = (self.current_mesh.vertex_buffer.size() / 12) as u32; // 12 bytes per vertex (3 f32)
         let triangle_count = self.current_mesh.index_count / 3;
         (vertex_count, triangle_count)
+    }
+
+    /// Get detailed mesh information including dimensions
+    ///
+    /// Returns (vertices, triangles, size_x, size_y, size_z)
+    /// Size values are 0.0 if no mesh is loaded or dimensions cannot be calculated.
+    pub fn mesh_details(&self) -> (u32, u32, f32, f32, f32) {
+        let (vertices, triangles) = self.mesh_info();
+        
+        let (size_x, size_y, size_z) = self.current_mesh_cpu
+            .as_ref()
+            .and_then(|mesh| mesh.dimensions())
+            .unwrap_or((0.0, 0.0, 0.0));
+        
+        (vertices, triangles, size_x, size_y, size_z)
     }
 
     /// Render a frame using the given pipeline

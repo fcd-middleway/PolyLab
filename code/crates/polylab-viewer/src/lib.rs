@@ -120,6 +120,22 @@ impl ViewerHandle {
         let (vertices, triangles) = self.renderer.mesh_info();
         vec![vertices, triangles]
     }
+
+    /// Get detailed mesh information including dimensions
+    ///
+    /// Returns [vertices, triangles, sizeX, sizeY, sizeZ] as a JavaScript array.
+    /// Size values are 0.0 if no mesh is loaded.
+    #[wasm_bindgen]
+    pub fn mesh_details(&self) -> Vec<f32> {
+        let (vertices, triangles, size_x, size_y, size_z) = self.renderer.mesh_details();
+        vec![
+            vertices as f32,
+            triangles as f32,
+            size_x,
+            size_y,
+            size_z,
+        ]
+    }
 }
 
 // Initialize wasm-bindgen

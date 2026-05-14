@@ -4,6 +4,8 @@
  * Handles file picker, drag & drop, and mesh loading from .obj files.
  */
 
+import { meshLogger } from './logger';
+
 /**
  * Callback type for mesh loading events
  */
@@ -61,24 +63,34 @@ export async function loadMeshFromFile(
     onLoad: MeshLoadCallback,
     onError: ErrorCallback
 ): Promise<void> {
+    meshLogger.debug('Starting file load', { filename: file.name, size: file.size });
+    
     // Validate file extension
     if (!file.name.toLowerCase().endsWith('.obj')) {
-        onError(`Invalid file type: ${file.name}. Only .obj files are supported.`);
+        const error = `Invalid file type: ${file.name}. Only .obj files are supported.`;
+        meshLogger.warn('Invalid file type', { filename: file.name });
+        onError(error);
         return;
     }
 
     // Validate file size (max 50 MB)
     const maxSize = 50 * 1024 * 1024;
     if (file.size > maxSize) {
-        onError(`File too large: ${(file.size / 1024 / 1024).toFixed(2)} MB. Maximum size is 50 MB.`);
+        const error = `File too large: ${(file.size / 1024 / 1024).toFixed(2)} MB. Maximum size is 50 MB.`;
+        meshLogger.warn('File too large', { filename: file.name, sizeMB: (file.size / 1024 / 1024).toFixed(2) });
+        onError(error);
         return;
     }
 
     try {
+        meshLogger.debug('Reading file content...', { filename: file.name });
         const content = await readFileAsText(file);
+        meshLogger.debug('File content read successfully', { filename: file.name, contentSize: content.length });
         await onLoad(content, file.name);
     } catch (error) {
-        onError(`Failed to read file: ${error instanceof Error ? error.message : String(error)}`);
+        const errorMsg = `Failed to read file: ${error instanceof Error ? error.message : String(error)}`;
+        meshLogger.error('File read error', { filename: file.name, error: errorMsg });
+        onError(errorMsg);
     }
 }
 
@@ -147,10 +159,14 @@ export function setupDropZone(
 
         const files = (e as DragEvent).dataTransfer?.files;
         if (!files || files.length === 0) {
+            meshLogger.debug('Drop event with no files');
             return;
         }
 
         const file = files[0];
+        meshLogger.info('File dropped', { filename: file.name, size: file.size });
         await loadMeshFromFile(file, onLoad, onError);
     });
+    
+    meshLogger.debug('Drop zone configured', { element: dropZone.tagName });
 }

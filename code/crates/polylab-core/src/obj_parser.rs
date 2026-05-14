@@ -20,13 +20,13 @@ use glam::Vec3;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ObjParseError {
     /// Invalid vertex line format
-    InvalidVertex(String),
+    InvalidVertex(String, usize),
     /// Invalid face line format
-    InvalidFace(String),
+    InvalidFace(String, usize),
     /// Invalid normal line format
-    InvalidNormal(String),
+    InvalidNormal(String, usize),
     /// Face references non-existent vertex
-    InvalidVertexIndex(usize),
+    InvalidVertexIndex(usize, usize),
     /// Empty file or no geometry
     EmptyFile,
 }
@@ -34,11 +34,21 @@ pub enum ObjParseError {
 impl std::fmt::Display for ObjParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ObjParseError::InvalidVertex(line) => write!(f, "Invalid vertex line: {}", line),
-            ObjParseError::InvalidFace(line) => write!(f, "Invalid face line: {}", line),
-            ObjParseError::InvalidNormal(line) => write!(f, "Invalid normal line: {}", line),
-            ObjParseError::InvalidVertexIndex(idx) => write!(f, "Face references non-existent vertex index: {}", idx),
-            ObjParseError::EmptyFile => write!(f, "Empty OBJ file or no geometry found"),
+            ObjParseError::InvalidVertex(line, line_num) => {
+                write!(f, "Invalid vertex format at line {}: '{}'. Expected: v <x> <y> <z>", line_num, line)
+            },
+            ObjParseError::InvalidFace(line, line_num) => {
+                write!(f, "Invalid face format at line {}: '{}'. Expected: f <v1> <v2> <v3> or f <v1>/<vt1>/<vn1> <v2>/<vt2>/<vn2> <v3>/<vt3>/<vn3>", line_num, line)
+            },
+            ObjParseError::InvalidNormal(line, line_num) => {
+                write!(f, "Invalid normal format at line {}: '{}'. Expected: vn <x> <y> <z>", line_num, line)
+            },
+            ObjParseError::InvalidVertexIndex(idx, line_num) => {
+                write!(f, "Face at line {} references non-existent vertex index: {}. Make sure vertex indices are valid and vertices are declared before faces.", line_num, idx)
+            },
+            ObjParseError::EmptyFile => {
+                write!(f, "Empty OBJ file or no geometry found. File must contain at least one vertex (v) and one face (f).")
+            },
         }
     }
 }
@@ -84,15 +94,15 @@ pub fn parse_obj(content: &str) -> Result<Mesh, ObjParseError> {
             "v" => {
                 // Vertex position: v x y z [w]
                 if parts.len() < 4 {
-                    return Err(ObjParseError::InvalidVertex(format!("Line {}: {}", line_num + 1, line)));
+                    return Err(ObjParseError::InvalidVertex(line.to_string(), line_num + 1));
                 }
                 
                 let x = parts[1].parse::<f32>()
-                    .map_err(|_| ObjParseError::InvalidVertex(format!("Line {}: invalid x coordinate", line_num + 1)))?;
+                    .map_err(|_| ObjParseError::InvalidVertex(line.to_string(), line_num + 1))?;
                 let y = parts[2].parse::<f32>()
-                    .map_err(|_| ObjParseError::InvalidVertex(format!("Line {}: invalid y coordinate", line_num + 1)))?;
+                    .map_err(|_| ObjParseError::InvalidVertex(line.to_string(), line_num + 1))?;
                 let z = parts[3].parse::<f32>()
-                    .map_err(|_| ObjParseError::InvalidVertex(format!("Line {}: invalid z coordinate", line_num + 1)))?;
+                    .map_err(|_| ObjParseError::InvalidVertex(line.to_string(), line_num + 1))?;
                 
                 vertices.push(Vec3::new(x, y, z));
             }
@@ -100,15 +110,15 @@ pub fn parse_obj(content: &str) -> Result<Mesh, ObjParseError> {
             "vn" => {
                 // Vertex normal: vn x y z
                 if parts.len() < 4 {
-                    return Err(ObjParseError::InvalidNormal(format!("Line {}: {}", line_num + 1, line)));
+                    return Err(ObjParseError::InvalidNormal(line.to_string(), line_num + 1));
                 }
                 
                 let x = parts[1].parse::<f32>()
-                    .map_err(|_| ObjParseError::InvalidNormal(format!("Line {}: invalid x coordinate", line_num + 1)))?;
+                    .map_err(|_| ObjParseError::InvalidNormal(line.to_string(), line_num + 1))?;
                 let y = parts[2].parse::<f32>()
-                    .map_err(|_| ObjParseError::InvalidNormal(format!("Line {}: invalid y coordinate", line_num + 1)))?;
+                    .map_err(|_| ObjParseError::InvalidNormal(line.to_string(), line_num + 1))?;
                 let z = parts[3].parse::<f32>()
-                    .map_err(|_| ObjParseError::InvalidNormal(format!("Line {}: invalid z coordinate", line_num + 1)))?;
+                    .map_err(|_| ObjParseError::InvalidNormal(line.to_string(), line_num + 1))?;
                 
                 normals.push(Vec3::new(x, y, z));
             }
@@ -122,7 +132,7 @@ pub fn parse_obj(content: &str) -> Result<Mesh, ObjParseError> {
             "f" => {
                 // Face: f v1[/vt1[/vn1]] v2[/vt2[/vn2]] v3[/vt3[/vn3]]
                 if parts.len() < 4 {
-                    return Err(ObjParseError::InvalidFace(format!("Line {}: need at least 3 vertices", line_num + 1)));
+                    return Err(ObjParseError::InvalidFace(line.to_string(), line_num + 1));
                 }
                 
                 // Parse first 3 vertices (triangulate if more)
@@ -131,11 +141,11 @@ pub fn parse_obj(content: &str) -> Result<Mesh, ObjParseError> {
                 for i in 0..3 {
                     let vertex_str = parts[i + 1];
                     let vertex_idx = parse_face_vertex(vertex_str)
-                        .map_err(|_| ObjParseError::InvalidFace(format!("Line {}: invalid vertex '{}'", line_num + 1, vertex_str)))?;
+                        .map_err(|_| ObjParseError::InvalidFace(line.to_string(), line_num + 1))?;
                     
                     // OBJ uses 1-based indexing
                     if vertex_idx < 1 || vertex_idx > vertices.len() {
-                        return Err(ObjParseError::InvalidVertexIndex(vertex_idx));
+                        return Err(ObjParseError::InvalidVertexIndex(vertex_idx, line_num + 1));
                     }
                     
                     face_vertices[i] = vertex_idx - 1; // Convert to 0-based
@@ -278,7 +288,7 @@ f 2 5 6
         let obj = "v 0.0 0.0\nv 1.0 0.0 0.0\nv 0.0 1.0 0.0\nf 1 2 3";
         let result = parse_obj(obj);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ObjParseError::InvalidVertex(_)));
+        assert!(matches!(result.unwrap_err(), ObjParseError::InvalidVertex(_, _)));
     }
 
     #[test]
@@ -286,7 +296,15 @@ f 2 5 6
         let obj = "v 0.0 0.0 0.0\nv 1.0 0.0 0.0\nv 0.0 1.0 0.0\nf 1 2";
         let result = parse_obj(obj);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ObjParseError::InvalidFace(_)));
+        assert!(matches!(result.unwrap_err(), ObjParseError::InvalidFace(_, _)));
+    }
+
+    #[test]
+    fn test_invalid_vertex_index() {
+        let obj = "v 0.0 0.0 0.0\nv 1.0 0.0 0.0\nf 1 2 5";
+        let result = parse_obj(obj);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), ObjParseError::InvalidVertexIndex(_, _)));
     }
 
     #[test]
@@ -294,7 +312,11 @@ f 2 5 6
         let obj = "v 0.0 0.0 0.0\nv 1.0 0.0 0.0\nv 0.0 1.0 0.0\nf 1 2 10";
         let result = parse_obj(obj);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), ObjParseError::InvalidVertexIndex(10));
+        // Check it's an InvalidVertexIndex error with vertex index 10 and some line number
+        match result.unwrap_err() {
+            ObjParseError::InvalidVertexIndex(idx, _line_num) => assert_eq!(idx, 10),
+            _ => panic!("Expected InvalidVertexIndex error"),
+        }
     }
 
     #[test]

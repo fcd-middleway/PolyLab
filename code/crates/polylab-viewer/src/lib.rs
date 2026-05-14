@@ -38,24 +38,47 @@ impl ViewerHandle {
     /// Call from JS: `await ViewerHandle.create('canvas-id')`
     #[wasm_bindgen]
     pub async fn create(canvas_id: &str) -> Result<ViewerHandle, JsValue> {
-        // Setup panic hook for better error messages in browser console
-        console_error_panic_hook::set_once();
-
+        log::info!("Creating viewer for canvas: {}", canvas_id);
+        
         // Get canvas element from DOM
-        let window = web_sys::window().ok_or("No window found")?;
-        let document = window.document().ok_or("No document found")?;
+        let window = web_sys::window()
+            .ok_or_else(|| {
+                log::error!("Failed to get window object");
+                JsValue::from_str("Window object not available. Are you running in a browser?")
+            })?;
+        
+        let document = window.document()
+            .ok_or_else(|| {
+                log::error!("Failed to get document object");
+                JsValue::from_str("Document object not available")
+            })?;
+        
         let canvas = document
             .get_element_by_id(canvas_id)
-            .ok_or(format!("Canvas '{}' not found", canvas_id))?;
+            .ok_or_else(|| {
+                log::error!("Canvas element '{}' not found in DOM", canvas_id);
+                JsValue::from_str(&format!("Canvas element '{}' not found. Check that the element exists and has the correct ID.", canvas_id))
+            })?;
+        
         let canvas: web_sys::HtmlCanvasElement = canvas
             .dyn_into::<web_sys::HtmlCanvasElement>()
-            .map_err(|_| "Element is not a canvas")?;
+            .map_err(|_| {
+                log::error!("Element '{}' is not a canvas element", canvas_id);
+                JsValue::from_str(&format!("Element '{}' exists but is not a <canvas> element", canvas_id))
+            })?;
 
+        log::debug!("Canvas element found, creating WebGPU renderer...");
+        
         // Create renderer
         let renderer = Renderer::new(canvas)
             .await
-            .map_err(|e| JsValue::from_str(&e))?;
+            .map_err(|e| {
+                log::error!("Failed to create renderer: {}", e);
+                JsValue::from_str(&format!("WebGPU initialization failed: {}. Make sure your browser supports WebGPU.", e))
+            })?;
 
+        log::debug!("Renderer created, building render pipeline...");
+        
         // Create render pipeline with bind group layout
         let bind_group_layout = renderer.bind_group_layout();
         let pipeline = create_render_pipeline(
@@ -64,6 +87,7 @@ impl ViewerHandle {
             &bind_group_layout,
         );
 
+        log::info!("Viewer created successfully");
         Ok(ViewerHandle { renderer, pipeline })
     }
 
@@ -102,25 +126,36 @@ impl ViewerHandle {
     /// ```
     #[wasm_bindgen]
     pub fn load_mesh(&mut self, mesh_id: &str, obj_content: &str) -> Result<String, JsValue> {
+        log::info!("Loading mesh with ID: {}", mesh_id);
+        log::debug!("OBJ content size: {} bytes", obj_content.len());
+        
         // Parse OBJ file
         let mesh = polylab_core::obj_parser::parse_obj(obj_content)
-            .map_err(|e| JsValue::from_str(&format!("OBJ parse error: {}", e)))?;
+            .map_err(|e| {
+                log::error!("Failed to parse OBJ file '{}': {}", mesh_id, e);
+                JsValue::from_str(&format!("Failed to parse OBJ file: {}. Check that the file is a valid Wavefront OBJ format.", e))
+            })?;
 
+        log::debug!("Mesh parsed: {} vertices, {} faces", mesh.vertices.len(), mesh.faces.len());
+        
         // Add mesh to scene
         self.renderer.add_mesh(mesh_id.to_string(), mesh);
 
+        log::info!("Mesh '{}' loaded successfully", mesh_id);
         Ok(mesh_id.to_string())
     }
 
     /// Set the visibility of a mesh
     #[wasm_bindgen]
     pub fn set_mesh_visibility(&mut self, mesh_id: &str, visible: bool) {
+        log::debug!("Setting mesh '{}' visibility to: {}", mesh_id, visible);
         self.renderer.set_mesh_visibility(mesh_id, visible);
     }
 
     /// Remove a mesh from the scene
     #[wasm_bindgen]
     pub fn remove_mesh(&mut self, mesh_id: &str) {
+        log::info!("Removing mesh: {}", mesh_id);
         self.renderer.remove_mesh(mesh_id);
     }
 
@@ -156,5 +191,11 @@ impl ViewerHandle {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
 pub fn init() {
+    // Setup panic hook for better error messages in browser console
     console_error_panic_hook::set_once();
+    
+    // Initialize logger to output to browser console
+    console_log::init_with_level(log::Level::Debug).expect("Failed to initialize logger");
+    
+    log::info!("PolyLab Viewer initialized");
 }

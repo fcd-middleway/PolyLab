@@ -6,6 +6,7 @@
 use wgpu;
 use crate::constants;
 use crate::webgpu_context::WebGpuContext;
+use crate::mesh_gpu::MeshGPU;
 
 // Desktop-specific imports
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,6 +20,7 @@ pub struct Renderer {
     context: WebGpuContext,
     view_uniform_buffer: wgpu::Buffer,
     view_bind_group: wgpu::BindGroup,
+    current_mesh: MeshGPU,
 }
 
 impl Renderer {
@@ -37,10 +39,14 @@ impl Renderer {
         // Create bind group
         let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer);
         
+        // Create default triangle mesh
+        let current_mesh = MeshGPU::default_triangle(&context.device);
+        
         Ok(Self { 
             context,
             view_uniform_buffer,
             view_bind_group,
+            current_mesh,
         })
     }
 
@@ -59,10 +65,14 @@ impl Renderer {
         // Create bind group
         let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer);
         
+        // Create default triangle mesh
+        let current_mesh = MeshGPU::default_triangle(&context.device);
+        
         Ok(Self { 
             context,
             view_uniform_buffer,
             view_bind_group,
+            current_mesh,
         })
     }
 
@@ -179,10 +189,9 @@ impl Renderer {
 
             render_pass.set_pipeline(pipeline);
             render_pass.set_bind_group(0, &self.view_bind_group, &[]);
-            render_pass.draw(
-                0..constants::TRIANGLE_VERTEX_COUNT,
-                0..constants::INSTANCE_COUNT,
-            );
+            render_pass.set_vertex_buffer(0, self.current_mesh.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.current_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.current_mesh.index_count, 0, 0..1);
         }
 
         // Submit commands to GPU
@@ -196,6 +205,7 @@ impl Renderer {
 
     /// Resize the surface (e.g., when browser window changes)
     pub fn resize(&mut self, new_width: u32, new_height: u32) {
+        self.context.resize(new_width, new_height);
         
         // Update aspect ratio uniform
         let aspect_ratio = new_width as f32 / new_height as f32;
@@ -204,6 +214,5 @@ impl Renderer {
             0,
             bytemuck::cast_slice(&[aspect_ratio]),
         );
-        self.context.resize(new_width, new_height);
     }
 }

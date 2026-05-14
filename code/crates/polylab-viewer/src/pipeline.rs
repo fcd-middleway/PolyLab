@@ -4,6 +4,7 @@
 //! Pipeline is compiled once at startup and reused for all frames.
 
 use wgpu;
+use crate::mesh_gpu::GpuVertex;
 
 /// Create the render pipeline for drawing the triangle
 ///
@@ -37,7 +38,7 @@ pub fn create_render_pipeline(
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: Some("vs_main"),
-            buffers: &[], // No vertex buffers - positions in shader
+            buffers: &[GpuVertex::desc()], // Vertex buffer layout
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         },
         

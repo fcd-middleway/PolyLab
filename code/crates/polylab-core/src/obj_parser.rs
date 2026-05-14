@@ -2,6 +2,16 @@
 //!
 //! Parses Wavefront .obj files into Mesh structures.
 //! Supports vertices (v), normals (vn), texture coords (vt), and faces (f).
+//!
+//! TODO: Complete OBJ spec implementation for non-manifold meshes
+//! This parser is intentionally simplified for MVP. Full implementation needed for:
+//! - Non-manifold geometry support (critical for progressive compression research)
+//! - Complete material support (mtllib, usemtl)
+//! - Groups and objects (g, o)
+//! - Smoothing groups (s)
+//! - Free-form surfaces (curves, surfaces)
+//! - All texture coordinate formats
+//! Reference: http://paulbourke.net/dataformats/obj/
 
 use crate::mesh::{Mesh, Vertex, Face};
 use glam::Vec3;

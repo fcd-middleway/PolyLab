@@ -7,10 +7,12 @@ mod constants;
 mod webgpu_context;
 mod pipeline;
 mod renderer;
+mod mesh_gpu;
 
 // Public exports for desktop usage
 pub use pipeline::create_render_pipeline;
 pub use renderer::Renderer;
+pub use mesh_gpu::{MeshGPU, GpuVertex};
 
 // WASM-specific code
 #[cfg(target_arch = "wasm32")]

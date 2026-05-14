@@ -1,14 +1,41 @@
 import type { UIComponent } from '../types/ui.types';
+import { createFileInput, setupDropZone, type MeshLoadCallback, type ErrorCallback } from '../utils/meshLoader';
 
 /**
  * Toolbar component - Action buttons bar
  */
 export class Toolbar implements UIComponent {
     element: HTMLElement;
+    private fileInput: HTMLInputElement | null = null;
+    private onLoadCallback: MeshLoadCallback | null = null;
+    private onErrorCallback: ErrorCallback | null = null;
 
     constructor() {
         this.element = this.createElement();
         this.attachEventListeners();
+    }
+
+    /**
+     * Set the mesh loading callback
+     * 
+     * This is called when a file is successfully loaded.
+     * The main app should set this after the viewer is initialized.
+     */
+    public setLoadCallback(onLoad: MeshLoadCallback, onError: ErrorCallback): void {
+        this.onLoadCallback = onLoad;
+        this.onErrorCallback = onError;
+
+        // Create file input now that we have callbacks
+        if (!this.fileInput) {
+            this.fileInput = createFileInput(onLoad, onError);
+            document.body.appendChild(this.fileInput);
+
+            // Setup drop zone
+            const dropZone = this.element.querySelector('#drop-zone');
+            if (dropZone) {
+                setupDropZone(dropZone as HTMLElement, onLoad, onError);
+            }
+        }
     }
 
     private createElement(): HTMLElement {
@@ -49,6 +76,11 @@ export class Toolbar implements UIComponent {
         // Load button
         this.element.querySelector('#load-btn')?.addEventListener('click', () => {
             console.log('[Toolbar] Load button clicked');
+            if (this.fileInput) {
+                this.fileInput.click();
+            } else {
+                console.warn('[Toolbar] File input not initialized yet. Viewer might not be ready.');
+            }
         });
 
         // Rotate button
@@ -71,10 +103,13 @@ export class Toolbar implements UIComponent {
             console.log('[Toolbar] Settings button clicked');
         });
 
-        // Drop zone
+        // Drop zone click (same as Load button)
         const dropZone = this.element.querySelector('#drop-zone');
         dropZone?.addEventListener('click', () => {
             console.log('[Toolbar] Drop zone clicked');
+            if (this.fileInput) {
+                this.fileInput.click();
+            }
         });
 
         dropZone?.addEventListener('dragover', (e) => {

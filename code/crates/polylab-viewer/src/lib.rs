@@ -85,6 +85,41 @@ impl ViewerHandle {
     pub fn resize(&mut self, width: u32, height: u32) {
         self.renderer.resize(width, height);
     }
+
+    /// Load a mesh from OBJ file content
+    ///
+    /// Parses the OBJ string, creates GPU buffers, and replaces the current mesh.
+    /// Returns an error message if parsing or GPU upload fails.
+    ///
+    /// Example usage from JS:
+    /// ```js
+    /// try {
+    ///     viewer.load_mesh(objFileContent);
+    ///     console.log("Mesh loaded successfully!");
+    /// } catch (error) {
+    ///     console.error("Failed to load mesh:", error);
+    /// }
+    /// ```
+    #[wasm_bindgen]
+    pub fn load_mesh(&mut self, obj_content: &str) -> Result<(), JsValue> {
+        // Parse OBJ file
+        let mesh = polylab_core::obj_parser::parse_obj(obj_content)
+            .map_err(|e| JsValue::from_str(&format!("OBJ parse error: {}", e)))?;
+
+        // Replace current mesh
+        self.renderer.set_mesh(mesh);
+
+        Ok(())
+    }
+
+    /// Get current mesh information (vertex count, triangle count)
+    ///
+    /// Returns a tuple (vertices, triangles) as a JavaScript array.
+    #[wasm_bindgen]
+    pub fn mesh_info(&self) -> Vec<u32> {
+        let (vertices, triangles) = self.renderer.mesh_info();
+        vec![vertices, triangles]
+    }
 }
 
 // Initialize wasm-bindgen

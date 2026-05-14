@@ -25,6 +25,8 @@ export class StatusBar implements UIComponent {
             <span class="status-divider">|</span>
             <span class="status-item" id="status-backend">Backend: Unknown</span>
             <span class="status-divider">|</span>
+            <span class="status-item" id="status-mesh" style="display: none;">0 vertices, 0 triangles</span>
+            <span class="status-divider" id="status-mesh-divider" style="display: none;">|</span>
             <span class="status-item" id="status-fps">0 FPS</span>
         `;
 
@@ -38,6 +40,8 @@ export class StatusBar implements UIComponent {
         if (stats.fps !== undefined) this.stats.fps = stats.fps;
         if (stats.backend !== undefined) this.stats.backend = stats.backend;
         if (stats.meshCount !== undefined) this.stats.meshCount = stats.meshCount;
+        if (stats.vertices !== undefined) this.stats.vertices = stats.vertices;
+        if (stats.triangles !== undefined) this.stats.triangles = stats.triangles;
         if (stats.status !== undefined) this.stats.status = stats.status;
         
         this.render();
@@ -47,6 +51,19 @@ export class StatusBar implements UIComponent {
         this.updateElement('#status-message', this.stats.status);
         this.updateElement('#status-backend', `Backend: ${this.stats.backend}`);
         this.updateElement('#status-fps', `${Math.round(this.stats.fps)} FPS`);
+        
+        // Show/hide mesh stats if available
+        const meshEl = this.element.querySelector('#status-mesh') as HTMLElement;
+        const meshDivider = this.element.querySelector('#status-mesh-divider') as HTMLElement;
+        
+        if (this.stats.vertices !== undefined && this.stats.triangles !== undefined) {
+            this.updateElement('#status-mesh', `${this.stats.vertices} vertices, ${this.stats.triangles} triangles`);
+            if (meshEl) meshEl.style.display = '';
+            if (meshDivider) meshDivider.style.display = '';
+        } else {
+            if (meshEl) meshEl.style.display = 'none';
+            if (meshDivider) meshDivider.style.display = 'none';
+        }
     }
 
     private updateElement(selector: string, value: string): void {

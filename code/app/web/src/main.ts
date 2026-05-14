@@ -52,6 +52,8 @@ function initializeUI() {
 
 /**
  * Initialize WebGPU viewer
+ * 
+ * @returns The viewer handle for interaction
  */
 async function initializeViewer(canvas: HTMLCanvasElement, statusBar: StatusBar) {
     try {
@@ -101,6 +103,9 @@ async function initializeViewer(canvas: HTMLCanvasElement, statusBar: StatusBar)
 
         console.log('[PolyLab] Viewer initialized successfully');
 
+        // Return viewer handle for mesh loading
+        return viewer;
+
     } catch (error) {
         console.error('Failed to initialize:', error);
         statusBar.updateStats({ status: `❌ Error: ${error}` });
@@ -111,6 +116,8 @@ async function initializeViewer(canvas: HTMLCanvasElement, statusBar: StatusBar)
                 status: '❌ WebGPU not supported. Use Chrome 113+ or Edge 113+' 
             });
         }
+        
+        throw error;
     }
 }
 
@@ -134,7 +141,47 @@ async function main() {
     // Auto-resize canvas to fit container
     ui.viewerCanvas.autoResize();
     
-    await initializeViewer(canvas, ui.statusBar);
+    try {
+        const viewer = await initializeViewer(canvas, ui.statusBar);
+
+        // Setup mesh loading callbacks
+        ui.toolbar.setLoadCallback(
+            // onLoad callback
+            async (objContent: string, filename: string) => {
+                try {
+                    ui.statusBar.updateStats({ status: `Loading ${filename}...` });
+                    
+                    // Call WASM function to load mesh
+                    viewer.load_mesh(objContent);
+                    
+                    // Get mesh info from viewer
+                    const meshInfo = viewer.mesh_info();
+                    const [vertices, triangles] = meshInfo;
+                    
+                    ui.statusBar.updateStats({ 
+                        status: `✅ Loaded ${filename}`,
+                        vertices,
+                        triangles
+                    });
+                    
+                    console.log(`[PolyLab] Loaded mesh: ${vertices} vertices, ${triangles} triangles`);
+                } catch (error) {
+                    const errorMsg = error instanceof Error ? error.message : String(error);
+                    ui.statusBar.updateStats({ status: `❌ ${errorMsg}` });
+                    console.error('[PolyLab] Mesh loading error:', error);
+                }
+            },
+            // onError callback
+            (error: string) => {
+                ui.statusBar.updateStats({ status: `❌ ${error}` });
+                console.error('[PolyLab] File loading error:', error);
+            }
+        );
+
+        console.log('[PolyLab] Mesh loading configured');
+    } catch (error) {
+        console.error('[PolyLab] Failed to initialize viewer:', error);
+    }
 }
 
 // Start the application

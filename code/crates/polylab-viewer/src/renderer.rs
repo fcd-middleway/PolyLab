@@ -135,6 +135,23 @@ impl Renderer {
         self.context.config.format
     }
 
+    /// Replace the current mesh with a new one
+    ///
+    /// Creates GPU buffers from the provided mesh and replaces the current mesh.
+    /// Call this after parsing an OBJ file to display the loaded mesh.
+    pub fn set_mesh(&mut self, mesh: polylab_core::Mesh) {
+        self.current_mesh = MeshGPU::from_mesh(&self.context.device, &mesh);
+    }
+
+    /// Get the current mesh vertex and triangle counts
+    ///
+    /// Returns (vertex_count, triangle_count) for display in UI.
+    pub fn mesh_info(&self) -> (u32, u32) {
+        let vertex_count = (self.current_mesh.vertex_buffer.size() / 12) as u32; // 12 bytes per vertex (3 f32)
+        let triangle_count = self.current_mesh.index_count / 3;
+        (vertex_count, triangle_count)
+    }
+
     /// Render a frame using the given pipeline
     ///
     /// Acquires surface texture → creates command encoder → records render pass → submits to GPU.

@@ -20,6 +20,8 @@ export interface ViewerStats {
     fps: number;
     backend: string;
     meshCount: number;
+    vertices?: number;
+    triangles?: number;
     status: string;
 }
 

@@ -43,9 +43,14 @@ curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
 ### Phase 1.1 - WebGPU Hello World 🎬
 
-**Easy way** (automated script):
+**Web version** (runs in browser):
 ```bash
-./scripts/run-phase1.sh
+./scripts/run-web-app.sh
+```
+
+**Desktop version** (native application):
+```bash
+./scripts/run-desktop-app.sh
 ```
 
 **Manual way**:

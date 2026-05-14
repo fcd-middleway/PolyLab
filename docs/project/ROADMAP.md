@@ -62,7 +62,7 @@
 
 ---
 
-#### Iteration 1.1.5: Code Refactoring 🔧
+#### Iteration 1.1.5: Code Refactoring ✅
 **Tasks**:
 - Clarify code structure in `renderer.rs` (separate WebGPU setup from render logic)
 - Add detailed comments explaining WebGPU concepts
@@ -72,11 +72,18 @@
 
 **Deliverable**: Cleaner, more maintainable codebase
 
+**Status**: ✅ **COMPLETED** (13 mai 2026)
+- `webgpu_context.rs` créé - Init WebGPU isolée (102 lignes)
+- `constants.rs` créé - Valeurs centralisées
+- `renderer.rs` simplifié - 70 lignes (vs 160 avant)
+- Documentation concise ajoutée dans tous les fichiers
+- Arborescence réorganisée : `docs/`, `scripts/`, `code/`
+
 **Rationale**: Establish good practices before adding complexity
 
 ---
 
-#### Iteration 1.1.8: Desktop Native Support 🖥️
+#### Iteration 1.1.8: Desktop Native Support 🖥️ ✅ COMPLETED
 **Tasks**:
 - Create native desktop entry point (winit-based window)
 - Adapt code with `#[cfg(target_arch = "wasm32")]` vs native
@@ -86,6 +93,8 @@
 
 **Deliverable**: App runs natively on desktop AND as WASM in browser
 
+**Status**: ✅ **COMPLETED** (14 mai 2026)
+
 **Rationale**: Avoid accumulating platform-specific issues by supporting both targets early
 
 **Technical notes**:
@@ -93,9 +102,15 @@
 - wgpu already supports both WASM (WebGPU) and native (Vulkan/Metal/DX12)
 - Conditional compilation for surface creation only
 
+**Implementation details**:
+- New crate `polylab-desktop` with winit ApplicationHandler pattern
+- Dual constructors: `Renderer::new()` (WASM) and `Renderer::new_native()` (native)
+- Backends::BROWSER_WEBGPU for WASM, Backends::PRIMARY for native
+- Separate scripts: `run-web-app.sh` and `run-desktop-app.sh`
+
 ---
 
-#### Iteration 1.2: Mesh Rendering
+#### Iteration 1.2: Mesh Rendering **← NEXT**
 **Tasks**:
 - Load mesh from `polylab-core` (already has Mesh struct)
 - Create vertex/index buffers from mesh data

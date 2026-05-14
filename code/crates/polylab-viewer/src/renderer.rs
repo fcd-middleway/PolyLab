@@ -7,6 +7,10 @@ use wgpu;
 use crate::constants;
 use crate::webgpu_context::WebGpuContext;
 
+// Desktop-specific imports
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
+
 /// High-level renderer - wraps WebGpuContext and executes render operations
 ///
 /// Separates "what to render" (render logic) from "how to setup GPU" (context).
@@ -16,9 +20,17 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    /// Create renderer from a canvas element
+    /// Create renderer from a canvas element (WASM only)
+    #[cfg(target_arch = "wasm32")]
     pub async fn new(canvas: web_sys::HtmlCanvasElement) -> Result<Self, String> {
         let context = WebGpuContext::new(canvas).await?;
+        Ok(Self { context })
+    }
+
+    /// Create renderer from a winit window (Desktop only)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn new_native(window: Arc<winit::window::Window>) -> Result<Self, String> {
+        let context = WebGpuContext::new_native(window).await?;
         Ok(Self { context })
     }
 

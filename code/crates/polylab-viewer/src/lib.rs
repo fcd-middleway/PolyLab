@@ -2,20 +2,17 @@
 //!
 //! WebGPU-based 3D rendering engine for meshes and point clouds.
 
-// Only compile for WASM target
-#[cfg(target_arch = "wasm32")]
+// Core modules (available for both WASM and desktop)
 mod constants;
-#[cfg(target_arch = "wasm32")]
 mod webgpu_context;
-#[cfg(target_arch = "wasm32")]
 mod pipeline;
-#[cfg(target_arch = "wasm32")]
 mod renderer;
 
-#[cfg(target_arch = "wasm32")]
-use pipeline::create_render_pipeline;
-#[cfg(target_arch = "wasm32")]
-use renderer::Renderer;
+// Public exports for desktop usage
+pub use pipeline::create_render_pipeline;
+pub use renderer::Renderer;
+
+// WASM-specific code
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 

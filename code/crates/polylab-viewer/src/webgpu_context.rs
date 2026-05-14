@@ -6,6 +6,10 @@
 use wgpu;
 use crate::constants;
 
+// Desktop-specific imports
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
+
 /// WebGPU context - encapsulates all GPU resources needed for rendering
 ///
 /// Holds the Device (logical GPU), Queue (command submission), Surface (render target),
@@ -32,6 +36,7 @@ impl WebGpuContext {
     ///
     /// Creates Instance → Adapter → Device → Surface → Config
     /// This is the heavy lifting that happens once at startup.
+    #[cfg(target_arch = "wasm32")]
     pub async fn new(canvas: web_sys::HtmlCanvasElement) -> Result<Self, String> {
         let width = canvas.width();
         let height = canvas.height();
@@ -50,6 +55,77 @@ impl WebGpuContext {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await
+            .map_err(|e| format!("Failed to find adapter: {:?}", e))?;
+
+        // Device + Queue: logical interface to GPU + command submission
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("Main Device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| format!("Failed to create device: {:?}", e))?;
+
+        // Configure surface format and present mode
+        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_format = surface_caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| f.is_srgb())
+            .unwrap_or(surface_caps.formats[0]);
+
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width,
+            height,
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+            desired_maximum_frame_latency: constants::FRAME_LATENCY,
+        };
+        surface.configure(&device, &config);
+
+        Ok(Self {
+            device,
+            queue,
+            surface,
+            config,
+            size: (width, height),
+        })
+    }
+
+    /// Initialize WebGPU context from a winit window (Desktop only)
+    ///
+    /// Creates Instance → Adapter → Device → Surface → Config
+    /// Uses native backends (Vulkan, Metal, DX12) instead of WebGPU.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn new_native(window: Arc<winit::window::Window>) -> Result<Self, String> {
+        let size = window.inner_size();
+        let width = size.width;
+        let height = size.height;
+
+        // Instance: entry point - uses native backends
+        let mut instance_desc = wgpu::InstanceDescriptor::new_without_display_handle();
+        instance_desc.backends = wgpu::Backends::PRIMARY; // Vulkan, Metal, DX12
+        let instance = wgpu::Instance::new(instance_desc);
+
+        // Surface: render target tied to the window
+        let surface = instance
+            .create_surface(window.clone())
+            .map_err(|e| format!("Failed to create surface: {:?}", e))?;
+
+        // Adapter: represents a physical GPU
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })

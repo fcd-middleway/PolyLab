@@ -1,0 +1,18 @@
+[package]
+name = "polylab-desktop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "polylab-desktop"
+path = "src/main.rs"
+
+[dependencies]
+polylab-viewer = { path = "../polylab-viewer" }
+wgpu = "29.0"           # WebGPU API (for RenderPipeline type)
+pollster = "0.3"        # Block on async functions
+env_logger = "0.11"     # Console logging
+log = "0.4"             # Logging facade
+winit = "0.30"          # Cross-platform windowing

@@ -1,6 +1,6 @@
 # 📝 Prochaines étapes - Session suivante
 
-**Date de dernière mise à jour** : 13 mai 2026
+**Date de dernière mise à jour** : 14 mai 2026
 
 ---
 
@@ -12,50 +12,37 @@
 - Architecture Rust/WASM opérationnelle
 - Pipeline de build automatisé avec wasm-pack
 
----
+### Iteration 1.1.5 : Refactorisation - ✅ COMPLÉTÉE
+**Code refactorisé** :
+- ✅ `webgpu_context.rs` créé - Init WebGPU isolée
+- ✅ `constants.rs` créé - Valeurs centralisées
+- ✅ `renderer.rs` simplifié (~70 lignes vs 160)
+- ✅ Documentation concise ajoutée partout (lib.rs, pipeline.rs, shaders.wgsl)
 
-## 🎯 Prochaines sessions
+**Arborescence réorganisée** :
+- ✅ `docs/` structuré : `project/` et `phases/`
+- ✅ `scripts/` créé pour scripts de lancement
+- ✅ `code/` regroupe crates/ et app/
+- ✅ Cargo.toml reste à la racine (convention Rust)
 
-### 🔧 Session A : Refactorisation (Iteration 1.1.5)
-**Objectif** : Clarifier le code avant d'ajouter plus de fonctionnalités
-
-#### Tâches prioritaires
-
-1. **Restructurer `renderer.rs`**
-   - Séparer l'initialisation WebGPU du rendu
-   - Créer une méthode `initialize_webgpu()` dédiée
-   - Isoler la logique de render pass dans une fonction
-   - Améliorer les messages d'erreur
-
-2. **Documenter les concepts WebGPU**
-   - Ajouter des commentaires explicatifs sur :
-     - Instance, Adapter, Device, Queue
-     - Surface et SurfaceConfiguration
-     - RenderPipeline et RenderPass
-     - CurrentSurfaceTexture enum
-   - Expliquer le flow de rendu dans le code
-
-3. **Améliorer la gestion d'erreurs**
-   - Créer un type d'erreur custom `RendererError`
-   - Logging plus détaillé avec `web_sys::console`
-   - Messages d'erreur user-friendly pour le JS
-
-4. **Nettoyage du code**
-   - Revoir les imports (éliminer unused)
-   - Uniformiser le style de code
-   - Ajouter des tests unitaires simples si possible
-
-**Fichiers à modifier** :
-- `crates/polylab-viewer/src/renderer.rs` (priorité haute)
-- `crates/polylab-viewer/src/lib.rs` (améliorer API exports)
-- `crates/polylab-viewer/src/pipeline.rs` (documenter options)
-
-**Livrable** : Code plus lisible et maintenable, prêt pour ajout de features
+### Iteration 1.1.8 : Support Desktop - ✅ COMPLÉTÉE
+**Dual-platform support** :
+- ✅ Nouveau crate `polylab-desktop` créé
+- ✅ winit 0.30 + ApplicationHandler pattern implémenté
+- ✅ `webgpu_context::new_native()` pour création de surface native
+- ✅ `renderer::new_native()` pour constructeur desktop
+- ✅ Compilation conditionnelle (#[cfg]) pour WASM vs native
+- ✅ Scripts séparés : `run-web-app.sh` et `run-desktop-app.sh`
+- ✅ Triangle s'affiche dans fenêtre 800×600 (macOS Metal backend)
 
 ---
 
-### 🖥️ Session B : Support Desktop (Iteration 1.1.8)
-**Objectif** : Permettre compilation native (pas seulement WASM)
+## 🎯 Prochaine session
+
+### 📦 Phase 1.2 : Chargement de mesh .obj (Iteration 1.2.1)
+**Objectif** : Charger et afficher un mesh 3D simple au lieu du triangle hardcodé
+
+**Pourquoi maintenant** : Infrastructure dual-platform en place, prêt pour données 3D réelles
 
 #### Tâches prioritaires
 
@@ -106,16 +93,17 @@
    ```
 
 **Fichiers à créer/modifier** :
-- `crates/sandbox/src/main.rs` (nouveau - entry point desktop)
-- `crates/sandbox/Cargo.toml` (ajouter winit dependency)
-- `crates/polylab-viewer/src/renderer.rs` (conditional compilation)
+- `code/crates/sandbox/src/main.rs` (nouveau - entry point desktop)
+- `code/crates/sandbox/Cargo.toml` (ajouter winit dependency)
+- `code/crates/polylab-viewer/src/webgpu_context.rs` (conditional compilation)
+- `code/crates/polylab-viewer/src/renderer.rs` (adapter pour WASM et native)
 
 **Livrable** : Application qui fonctionne à la fois en desktop et en web, même code de rendu
 
 ---
 
-### 📦 Session C : Mesh .obj (Iteration 1.2)
-**Objectif** : Afficher un vrai mesh 3D (après refactoring + desktop)
+### 📦 Après Desktop : Mesh .obj (Iteration 1.2)
+**Objectif** : Afficher un vrai mesh 3D
 
 #### Tâches (détails à planifier plus tard)
 - Parser fichier .obj (utiliser crate `tobj` ?)
@@ -124,7 +112,7 @@
 - Shaders avec matrices MVP
 - Rotation interactive
 
-**Note** : Ne pas commencer avant d'avoir fait les sessions A et B !
+**Note** : Ne pas commencer avant d'avoir fait le support desktop !
 
 ---
 
@@ -132,18 +120,18 @@
 
 ### Build WASM
 ```bash
-cd crates/polylab-viewer
+cd code/crates/polylab-viewer
 wasm-pack build --target web --dev
 ```
 
-### Run dev server
+### Run dev server (WASM)
 ```bash
-cd app/web
+cd code/app/web
 npm run dev
 # Puis ouvrir http://localhost:5173 en navigation privée
 ```
 
-### Build natif (après Session B)
+### Build natif (après Phase 1.1.8)
 ```bash
 cargo build --release
 cargo run

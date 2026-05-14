@@ -88,28 +88,40 @@ impl ViewerHandle {
 
     /// Load a mesh from OBJ file content
     ///
-    /// Parses the OBJ string, creates GPU buffers, and replaces the current mesh.
-    /// Returns an error message if parsing or GPU upload fails.
+    /// Parses the OBJ string, creates GPU buffers, and adds it to the scene.
+    /// Returns the mesh ID that can be used to control visibility or remove the mesh.
     ///
     /// Example usage from JS:
     /// ```js
     /// try {
-    ///     viewer.load_mesh(objFileContent);
-    ///     console.log("Mesh loaded successfully!");
+    ///     const meshId = viewer.load_mesh("mesh-1", objFileContent);
+    ///     console.log("Mesh loaded with ID:", meshId);
     /// } catch (error) {
     ///     console.error("Failed to load mesh:", error);
     /// }
     /// ```
     #[wasm_bindgen]
-    pub fn load_mesh(&mut self, obj_content: &str) -> Result<(), JsValue> {
+    pub fn load_mesh(&mut self, mesh_id: &str, obj_content: &str) -> Result<String, JsValue> {
         // Parse OBJ file
         let mesh = polylab_core::obj_parser::parse_obj(obj_content)
             .map_err(|e| JsValue::from_str(&format!("OBJ parse error: {}", e)))?;
 
-        // Replace current mesh
-        self.renderer.set_mesh(mesh);
+        // Add mesh to scene
+        self.renderer.add_mesh(mesh_id.to_string(), mesh);
 
-        Ok(())
+        Ok(mesh_id.to_string())
+    }
+
+    /// Set the visibility of a mesh
+    #[wasm_bindgen]
+    pub fn set_mesh_visibility(&mut self, mesh_id: &str, visible: bool) {
+        self.renderer.set_mesh_visibility(mesh_id, visible);
+    }
+
+    /// Remove a mesh from the scene
+    #[wasm_bindgen]
+    pub fn remove_mesh(&mut self, mesh_id: &str) {
+        self.renderer.remove_mesh(mesh_id);
     }
 
     /// Get current mesh information (vertex count, triangle count)
@@ -125,9 +137,11 @@ impl ViewerHandle {
     ///
     /// Returns [vertices, triangles, sizeX, sizeY, sizeZ] as a JavaScript array.
     /// Size values are 0.0 if no mesh is loaded.
+    /// If mesh_id is provided, returns info for that mesh, otherwise for the first visible mesh.
     #[wasm_bindgen]
-    pub fn mesh_details(&self) -> Vec<f32> {
-        let (vertices, triangles, size_x, size_y, size_z) = self.renderer.mesh_details();
+    pub fn mesh_details(&self, mesh_id: Option<String>) -> Vec<f32> {
+        let (vertices, triangles, size_x, size_y, size_z) = 
+            self.renderer.mesh_details(mesh_id.as_deref());
         vec![
             vertices as f32,
             triangles as f32,

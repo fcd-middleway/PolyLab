@@ -144,6 +144,23 @@ async function main() {
     try {
         const viewer = await initializeViewer(canvas, ui.statusBar);
 
+        // Initialize DetailsPanel with default triangle info
+        const initialDetails = viewer.mesh_details(null);
+        const [initVertices, initTriangles, initSizeX, initSizeY, initSizeZ] = initialDetails;
+        ui.detailsPanel.updateDetails({
+            vertices: Math.round(initVertices),
+            triangles: Math.round(initTriangles),
+            sizeX: initSizeX,
+            sizeY: initSizeY,
+            sizeZ: initSizeZ
+        });
+
+        // Set up visibility toggle callback for all meshes
+        ui.meshPanel.setVisibilityCallback((id: string, visible: boolean) => {
+            viewer.set_mesh_visibility(id, visible);
+            console.log(`[PolyLab] Mesh ${id} visibility: ${visible}`);
+        });
+
         // Setup mesh loading callbacks
         ui.toolbar.setLoadCallback(
             // onLoad callback
@@ -151,15 +168,17 @@ async function main() {
                 try {
                     ui.statusBar.updateStats({ status: `Loading ${filename}...` });
                     
+                    // Generate unique mesh ID
+                    const meshId = `mesh-${Date.now()}`;
+                    
                     // Call WASM function to load mesh
-                    viewer.load_mesh(objContent);
+                    viewer.load_mesh(meshId, objContent);
                     
                     // Get detailed mesh info from viewer
-                    const details = viewer.mesh_details();
+                    const details = viewer.mesh_details(meshId);
                     const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
                     
-                    // Add mesh to MeshPanel
-                    const meshId = `mesh-${Date.now()}`;
+                    // Add mesh to MeshPanel with visibility callback
                     ui.meshPanel.addMesh({
                         id: meshId,
                         name: filename,

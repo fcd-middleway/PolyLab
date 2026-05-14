@@ -6,6 +6,7 @@ import type { UIComponent, MeshInfo } from '../types/ui.types';
 export class MeshPanel implements UIComponent {
     element: HTMLElement;
     private meshes: MeshInfo[] = [];
+    private visibilityCallback: ((id: string, visible: boolean) => void) | null = null;
 
     constructor() {
         this.element = this.createElement();
@@ -50,6 +51,15 @@ export class MeshPanel implements UIComponent {
     }
 
     /**
+     * Set the visibility callback
+     * 
+     * This callback is called whenever a mesh visibility is toggled.
+     */
+    setVisibilityCallback(callback: (id: string, visible: boolean) => void): void {
+        this.visibilityCallback = callback;
+    }
+
+    /**
      * Toggle mesh visibility
      */
     private toggleMesh(id: string): void {
@@ -57,6 +67,12 @@ export class MeshPanel implements UIComponent {
         if (mesh) {
             mesh.visible = !mesh.visible;
             console.log(`[MeshPanel] Toggled mesh ${mesh.name}: ${mesh.visible ? 'visible' : 'hidden'}`);
+            
+            // Call the visibility callback if set
+            if (this.visibilityCallback) {
+                this.visibilityCallback(id, mesh.visible);
+            }
+            
             this.render();
         }
     }

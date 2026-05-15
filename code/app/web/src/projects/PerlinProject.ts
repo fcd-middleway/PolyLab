@@ -10,26 +10,14 @@ import type { ProjectConfig } from '../core/types';
 import type { StatusBar } from '../components/StatusBar';
 import type { DetailsPanel } from '../components/DetailsPanel';
 import type { MeshPanel } from '../components/MeshPanel';
+import { PerlinControlPanel, type TerrainParams } from '../components/PerlinControlPanel';
 import { appLogger, meshLogger } from '../utils/logger';
-
-/**
- * Terrain generation parameters
- */
-export interface TerrainParams {
-    seed: number;           // Random seed (0-999999)
-    octaves: number;        // Number of noise layers (1-8)
-    persistence: number;    // Amplitude decay per octave (0.1-1.0)
-    scale: number;          // Noise frequency scale (1-100)
-    width: number;          // Terrain width in world units
-    depth: number;          // Terrain depth in world units
-    widthSegments: number;  // Number of vertices along width
-    depthSegments: number;  // Number of vertices along depth
-}
 
 export class PerlinProject extends BaseProject {
     private statusBar: StatusBar | null = null;
     private detailsPanel: DetailsPanel | null = null;
     private meshPanel: MeshPanel | null = null;
+    private controlPanel: PerlinControlPanel | null = null;
     private currentTerrainId: string | null = null;
     
     // Default terrain parameters
@@ -108,6 +96,15 @@ export class PerlinProject extends BaseProject {
         this.meshPanel = meshPanel;
         this.statusBar = statusBar;
         this.detailsPanel = detailsPanel;
+        
+        // Create control panel with default params
+        this.controlPanel = new PerlinControlPanel(this.params);
+        
+        // Set generate callback
+        this.controlPanel.setGenerateCallback((params: TerrainParams) => {
+            this.params = params;
+            this.generateTerrain();
+        });
     }
 
     async init(viewer: any): Promise<void> {
@@ -122,8 +119,8 @@ export class PerlinProject extends BaseProject {
             });
         }
         
-        // Generate initial terrain
-        this.generateTerrain();
+        // Don't generate terrain automatically - let user use controls
+        appLogger.info('Perlin project ready - use controls to generate terrain');
     }
 
     update(deltaTime: number): void {
@@ -155,10 +152,32 @@ export class PerlinProject extends BaseProject {
                 status: '🏔️ Perlin Terrain - Ready to generate'
             });
         }
+        
+        // Replace details panel with control panel
+        if (this.detailsPanel && this.controlPanel) {
+            // Hide default details panel
+            this.detailsPanel.element.style.display = 'none';
+            
+            // Insert control panel after details panel
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent && !document.querySelector('.perlin-control-panel')) {
+                mainContent.appendChild(this.controlPanel.element);
+                appLogger.debug('Control panel added to DOM');
+            }
+        }
     }
 
     onDeactivate(): void {
         appLogger.debug('Perlin project deactivated');
+        
+        // Restore details panel and remove control panel
+        if (this.detailsPanel && this.controlPanel) {
+            this.detailsPanel.element.style.display = '';
+            const controlPanelElement = document.querySelector('.perlin-control-panel');
+            if (controlPanelElement) {
+                controlPanelElement.remove();
+            }
+        }
     }
 
     /**
@@ -169,9 +188,6 @@ export class PerlinProject extends BaseProject {
             appLogger.error('Cannot generate terrain: viewer not initialized');
             return;
         }
-
-        // Randomize seed for each generation
-        this.params.seed = Date.now() % 1000000;
 
         meshLogger.info('Generating terrain...', { params: this.params });
         

@@ -1,14 +1,15 @@
 /**
  * Camera Controls
  * 
- * Handles keyboard input for first-person camera control.
+ * Handles keyboard and mouse input for first-person camera control.
  * 
  * Controls:
- * - Arrow Up/Down: Move forward/backward
+ * - Arrow Up/Down: Move up/down (vertical)
  * - Arrow Left/Right: Strafe left/right
  * - Q/D: Rotate yaw (left/right)
  * - Z/S: Rotate pitch (up/down)
- * - Space/Shift: Move up/down
+ * - Mouse Scroll: Move forward/backward
+ * - Mouse Drag (left button): Orbital rotation around target
  */
 
 import { appLogger } from './logger';
@@ -145,8 +146,9 @@ export class CameraControls {
         window.addEventListener('mousedown', this.onMouseDown.bind(this));
         window.addEventListener('mousemove', this.onMouseMove.bind(this));
         window.addEventListener('mouseup', this.onMouseUp.bind(this));
+        window.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
         window.addEventListener('contextmenu', (e) => e.preventDefault()); // Prevent right-click menu
-        appLogger.debug('Keyboard and mouse event listeners attached');
+        appLogger.debug('Keyboard, mouse, and wheel event listeners attached');
     }
     
     /**
@@ -156,32 +158,26 @@ export class CameraControls {
         if (!this.enabled) return;
         
         // Prevent default browser behavior for camera control keys
-        const controlKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '];
+        const controlKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
         if (controlKeys.includes(event.key)) {
             event.preventDefault();
         }
         
         switch (event.key) {
-            // Movement - Arrow keys
+            // Vertical movement - Arrow Up/Down
             case 'ArrowUp':
-                this.state.moveForward = true;
+                this.state.moveUp = true;
                 break;
             case 'ArrowDown':
-                this.state.moveBackward = true;
+                this.state.moveDown = true;
                 break;
+            
+            // Horizontal strafing - Arrow Left/Right
             case 'ArrowLeft':
                 this.state.moveLeft = true;
                 break;
             case 'ArrowRight':
                 this.state.moveRight = true;
-                break;
-            
-            // Vertical movement
-            case ' ': // Space
-                this.state.moveUp = true;
-                break;
-            case 'Shift':
-                this.state.moveDown = true;
                 break;
             
             // Rotation - Q/D for yaw, Z/S for pitch
@@ -211,13 +207,15 @@ export class CameraControls {
         if (!this.enabled) return;
         
         switch (event.key) {
-            // Movement - Arrow keys
+            // Vertical movement - Arrow Up/Down
             case 'ArrowUp':
-                this.state.moveForward = false;
+                this.state.moveUp = false;
                 break;
             case 'ArrowDown':
-                this.state.moveBackward = false;
+                this.state.moveDown = false;
                 break;
+            
+            // Horizontal strafing - Arrow Left/Right
             case 'ArrowLeft':
                 this.state.moveLeft = false;
                 break;
@@ -225,15 +223,7 @@ export class CameraControls {
                 this.state.moveRight = false;
                 break;
             
-            // Vertical movement
-            case ' ': // Space
-                this.state.moveUp = false;
-                break;
-            case 'Shift':
-                this.state.moveDown = false;
-                break;
-            
-            // Rotation - Q/E for yaw, Z/S for pitch
+            // Rotation - Q/D for yaw, Z/S for pitch
             case 'q':
             case 'Q':
                 this.state.rotateLeft = false;
@@ -297,6 +287,20 @@ export class CameraControls {
             this.isDragging = false;
             appLogger.debug('Ended orbital rotation drag');
         }
+    }
+    
+    /**
+     * Handle mouse wheel event (forward/backward movement)
+     */
+    private onWheel(event: WheelEvent): void {
+        if (!this.enabled) return;
+        
+        event.preventDefault();
+        
+        // Scroll up = forward (negative deltaY), scroll down = backward (positive deltaY)
+        // Scale by moveSpeed * 2 for comfortable zoom speed
+        const scrollAmount = -event.deltaY * this.moveSpeed * 0.05;
+        this.viewer.camera_move_forward(scrollAmount);
     }
     
     /**

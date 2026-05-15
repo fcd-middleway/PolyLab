@@ -53,7 +53,7 @@ impl Camera {
             rotation_speed: 1.0,
             fov: 45.0,
             near: 0.1,
-            far: 100.0,
+            far: 200.0, // Extended for large terrains (100x100+)
         }
     }
     

@@ -59,7 +59,7 @@ pub fn create_render_pipeline(
             topology: wgpu::PrimitiveTopology::TriangleList,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw, // Counter-clockwise
-            cull_mode: None, // Disabled for debug - see both sides
+            cull_mode: Some(wgpu::Face::Back), // Cull back faces for performance
             polygon_mode: wgpu::PolygonMode::Fill,
             unclipped_depth: false,
             conservative: false,

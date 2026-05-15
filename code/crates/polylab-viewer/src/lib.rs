@@ -152,6 +152,104 @@ impl ViewerHandle {
         self.renderer.set_mesh_visibility(mesh_id, visible);
     }
 
+    /// Generate a procedural terrain mesh using Perlin noise
+    ///
+    /// Creates a 3D terrain with configurable parameters and adds it to the scene.
+    ///
+    /// # Parameters
+    /// * `mesh_id` - Unique identifier for the terrain mesh
+    /// * `seed` - Random seed (0-999999)
+    /// * `octaves` - Number of noise layers (1-8, more = more detail)
+    /// * `persistence` - Amplitude decay per octave (0.1-1.0, lower = smoother)
+    /// * `scale` - Noise frequency scale (1-100, higher = zoomed out)
+    /// * `width` - Terrain width in world units
+    /// * `depth` - Terrain depth in world units
+    /// * `width_segments` - Number of vertices along width (resolution)
+    /// * `depth_segments` - Number of vertices along depth (resolution)
+    ///
+    /// # Returns
+    /// The mesh ID on success
+    ///
+    /// # Example
+    /// ```js
+    /// const terrainId = viewer.generate_terrain(
+    ///     "terrain-1",  // mesh_id
+    ///     12345,        // seed
+    ///     4,            // octaves
+    ///     0.5,          // persistence
+    ///     20.0,         // scale
+    ///     20.0,         // width
+    ///     20.0,         // depth
+    ///     50,           // width_segments
+    ///     50            // depth_segments
+    /// );
+    /// ```
+    #[wasm_bindgen]
+    pub fn generate_terrain(
+        &mut self,
+        mesh_id: &str,
+        seed: u32,
+        octaves: u32,
+        persistence: f32,
+        scale: f32,
+        width: f32,
+        depth: f32,
+        width_segments: u32,
+        depth_segments: u32,
+    ) -> Result<String, JsValue> {
+        log::info!("Generating terrain with ID: {}", mesh_id);
+        log::debug!(
+            "Terrain params: seed={}, octaves={}, persistence={}, scale={}, {}x{}, {}x{} segments",
+            seed, octaves, persistence, scale, width, depth, width_segments, depth_segments
+        );
+
+        // Validate parameters
+        if octaves == 0 || octaves > 8 {
+            return Err(JsValue::from_str("Octaves must be between 1 and 8"));
+        }
+        if persistence < 0.1 || persistence > 1.0 {
+            return Err(JsValue::from_str("Persistence must be between 0.1 and 1.0"));
+        }
+        if scale <= 0.0 {
+            return Err(JsValue::from_str("Scale must be positive"));
+        }
+        if width <= 0.0 || depth <= 0.0 {
+            return Err(JsValue::from_str("Width and depth must be positive"));
+        }
+        if width_segments < 2 || depth_segments < 2 {
+            return Err(JsValue::from_str("Width and depth segments must be at least 2"));
+        }
+
+        // Create terrain parameters
+        let params = polylab_perlin::TerrainParams {
+            seed: seed as u64,
+            octaves,
+            persistence,
+            scale,
+            width,
+            depth,
+            width_segments,
+            depth_segments,
+            height_min: 0.0,
+            height_max: 10.0,
+        };
+
+        // Generate terrain mesh
+        let mesh = polylab_perlin::generate_terrain(&params);
+        
+        log::debug!(
+            "Terrain generated: {} vertices, {} faces",
+            mesh.vertices.len(),
+            mesh.faces.len()
+        );
+
+        // Add mesh to scene
+        self.renderer.add_mesh(mesh_id.to_string(), mesh);
+
+        log::info!("Terrain '{}' generated successfully", mesh_id);
+        Ok(mesh_id.to_string())
+    }
+
     /// Remove a mesh from the scene
     #[wasm_bindgen]
     pub fn remove_mesh(&mut self, mesh_id: &str) {

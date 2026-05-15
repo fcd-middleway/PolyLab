@@ -35,6 +35,17 @@ export interface PanelDefinition {
 }
 
 /**
+ * Drop zone configuration for file loading
+ */
+export interface DropZoneConfig {
+    enabled: boolean;
+    onLoad: (content: string, filename: string) => Promise<void>;
+    onError: (error: string) => void;
+    acceptedExtensions?: string[]; // e.g., ['.obj', '.stl']
+    label?: string; // Custom label for the drop zone
+}
+
+/**
  * Project configuration
  */
 export interface ProjectConfig {
@@ -43,4 +54,5 @@ export interface ProjectConfig {
     menuItems: MenuItem[];
     toolbarActions: ToolbarAction[];
     panels: PanelDefinition[];
+    dropZone?: DropZoneConfig; // Optional drag & drop zone
 }

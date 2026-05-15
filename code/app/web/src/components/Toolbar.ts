@@ -1,44 +1,19 @@
 import type { UIComponent } from '../types/ui.types';
-import type { ToolbarAction } from '../core/types';
-import { createFileInput, setupDropZone, type MeshLoadCallback, type ErrorCallback } from '../utils/meshLoader';
+import type { ToolbarAction, DropZoneConfig } from '../core/types';
+import { createFileInput, setupDropZone } from '../utils/meshLoader';
 
 /**
- * Toolbar component - Dynamic action buttons bar
+ * Toolbar component - Dynamic action buttons bar with optional drop zone
  */
 export class Toolbar implements UIComponent {
     element: HTMLElement;
-    private fileInput: HTMLInputElement | null = null;
-    private onLoadCallback: MeshLoadCallback | null = null;
-    private onErrorCallback: ErrorCallback | null = null;
     private actionsContainer: HTMLElement | null = null;
+    private dropZoneElement: HTMLElement | null = null;
+    private fileInput: HTMLInputElement | null = null;
     private currentActions: Map<string, ToolbarAction> = new Map();
 
     constructor() {
         this.element = this.createElement();
-        this.attachEventListeners();
-    }
-
-    /**
-     * Set the mesh loading callback
-     * 
-     * This is called when a file is successfully loaded.
-     * The main app should set this after the viewer is initialized.
-     */
-    public setLoadCallback(onLoad: MeshLoadCallback, onError: ErrorCallback): void {
-        this.onLoadCallback = onLoad;
-        this.onErrorCallback = onError;
-
-        // Create file input now that we have callbacks
-        if (!this.fileInput) {
-            this.fileInput = createFileInput(onLoad, onError);
-            document.body.appendChild(this.fileInput);
-
-            // Setup drop zone
-            const dropZone = this.element.querySelector('#drop-zone');
-            if (dropZone) {
-                setupDropZone(dropZone as HTMLElement, onLoad, onError);
-            }
-        }
     }
 
     /**
@@ -112,6 +87,53 @@ export class Toolbar implements UIComponent {
         }
     }
 
+    /**
+     * Configure drop zone for file loading
+     * Called by UIManager when project changes
+     */
+    public configureDropZone(config: DropZoneConfig | null): void {
+        // Remove existing drop zone if any
+        if (this.dropZoneElement) {
+            this.dropZoneElement.remove();
+            this.dropZoneElement = null;
+        }
+
+        // Remove existing file input
+        if (this.fileInput) {
+            this.fileInput.remove();
+            this.fileInput = null;
+        }
+
+        // If no config or disabled, hide drop zone
+        if (!config || !config.enabled) {
+            return;
+        }
+
+        // Create drop zone
+        this.dropZoneElement = document.createElement('div');
+        this.dropZoneElement.className = 'drop-zone';
+        this.dropZoneElement.id = 'drop-zone';
+        this.dropZoneElement.textContent = config.label || 'Drag & drop files here or click to browse';
+
+        // Add to toolbar after actions
+        const divider = document.createElement('div');
+        divider.className = 'toolbar-divider';
+        this.element.appendChild(divider);
+        this.element.appendChild(this.dropZoneElement);
+
+        // Create file input
+        this.fileInput = createFileInput(config.onLoad, config.onError);
+        document.body.appendChild(this.fileInput);
+
+        // Setup drop zone
+        setupDropZone(this.dropZoneElement, config.onLoad, config.onError);
+
+        // Click to open file picker
+        this.dropZoneElement.addEventListener('click', () => {
+            this.fileInput?.click();
+        });
+    }
+
     private createElement(): HTMLElement {
         const toolbar = document.createElement('div');
         toolbar.className = 'toolbar';
@@ -120,27 +142,11 @@ export class Toolbar implements UIComponent {
             <div class="toolbar-actions" id="toolbar-actions">
                 <!-- Dynamic buttons will be inserted here -->
             </div>
-            <div class="toolbar-divider"></div>
-            <div class="drop-zone" id="drop-zone">
-                Drag & drop .obj files or click to browse
-            </div>
         `;
 
         this.actionsContainer = toolbar.querySelector('#toolbar-actions');
 
         return toolbar;
-    }
-
-    private attachEventListeners(): void {
-        // Click on drop zone triggers file picker
-        const dropZone = this.element.querySelector('#drop-zone');
-        dropZone?.addEventListener('click', () => {
-            if (this.fileInput) {
-                this.fileInput.click();
-            } else {
-                console.warn('[Toolbar] File input not initialized yet. Viewer might not be ready.');
-            }
-        });
     }
 
     render(): void {
@@ -151,6 +157,10 @@ export class Toolbar implements UIComponent {
         if (this.fileInput) {
             this.fileInput.remove();
             this.fileInput = null;
+        }
+        if (this.dropZoneElement) {
+            this.dropZoneElement.remove();
+            this.dropZoneElement = null;
         }
         this.element.remove();
     }

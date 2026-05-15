@@ -51,6 +51,25 @@ export class MeshPanel implements UIComponent {
     }
 
     /**
+     * Remove a mesh from the panel
+     */
+    removeMesh(id: string): void {
+        const index = this.meshes.findIndex(m => m.id === id);
+        if (index !== -1) {
+            this.meshes.splice(index, 1);
+            this.render();
+        }
+    }
+
+    /**
+     * Clear all meshes
+     */
+    clearMeshes(): void {
+        this.meshes = [];
+        this.render();
+    }
+
+    /**
      * Set the visibility callback
      * 
      * This callback is called whenever a mesh visibility is toggled.

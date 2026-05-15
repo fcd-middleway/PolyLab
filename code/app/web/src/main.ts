@@ -8,6 +8,7 @@ import { ViewerCanvas } from './components/ViewerCanvas';
 import { ProjectManager } from './core/ProjectManager';
 import { UIManager } from './core/UIManager';
 import { ViewerProject } from './projects/ViewerProject';
+import { PerlinProject } from './projects/PerlinProject';
 import { appLogger, viewerLogger } from './utils/logger';
 
 // Import styles
@@ -153,9 +154,19 @@ async function main() {
         // Initialize ViewerProject with viewer
         await viewerProject.init(viewer);
         
-        // Register project
+        // Register ViewerProject
         projectManager.registerProject(viewerProject);
         appLogger.info('ViewerProject registered');
+
+        // Create PerlinProject
+        const perlinProject = new PerlinProject();
+        
+        // Inject UI components into PerlinProject
+        perlinProject.setUIComponents(ui.meshPanel, ui.statusBar, ui.detailsPanel);
+        
+        // Register PerlinProject (will be initialized when activated)
+        projectManager.registerProject(perlinProject);
+        appLogger.info('PerlinProject registered');
 
         // Configure header with available projects
         const projects = projectManager.getProjects();

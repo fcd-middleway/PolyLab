@@ -37,13 +37,17 @@ export class UIManager {
         // Reconfigure toolbar
         this.reconfigureToolbar(config.toolbarActions);
 
+        // Configure drop zone if specified
+        this.toolbar.configureDropZone(config.dropZone || null);
+
         // TODO: Reconfigure menu when Menu component is refactored
         // TODO: Reconfigure panels when PanelContainer is implemented
 
         uiLogger.debug('UI configuration applied', { 
             toolbarActions: config.toolbarActions.length,
             menuItems: config.menuItems.length,
-            panels: config.panels.length
+            panels: config.panels.length,
+            dropZoneEnabled: config.dropZone?.enabled || false
         });
     }
 

@@ -3,7 +3,7 @@ members = [
     "code/crates/polylab-core",
     "code/crates/polylab-viewer",
     "code/crates/polylab-desktop"
-]
+, "code/crates/polylab-perlin"]
 resolver = "2"
 
 [workspace.package]

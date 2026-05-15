@@ -129,16 +129,19 @@ impl Renderer {
             position: Vec3::new(0.0, 0.5, 0.0),
             normal: None,
             tex_coords: None,
+            color: None,
         });
         mesh.vertices.push(Vertex {
             position: Vec3::new(-0.5, -0.5, 0.0),
             normal: None,
             tex_coords: None,
+            color: None,
         });
         mesh.vertices.push(Vertex {
             position: Vec3::new(0.5, -0.5, 0.0),
             normal: None,
             tex_coords: None,
+            color: None,
         });
         
         // Single face

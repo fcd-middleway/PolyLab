@@ -2,12 +2,13 @@
 
 use glam::Vec3;
 
-/// A 3D vertex with position, normal and texture coordinates
+/// A 3D vertex with position, normal, texture coordinates and color
 #[derive(Debug, Clone)]
 pub struct Vertex {
     pub position: Vec3,
     pub normal: Option<Vec3>,
     pub tex_coords: Option<(f32, f32)>,
+    pub color: Option<Vec3>,  // RGB color [0.0-1.0]
 }
 
 /// A triangular face (3 vertex indices)
@@ -94,6 +95,7 @@ mod tests {
             position: Vec3::new(1.0, 2.0, 3.0),
             normal: None,
             tex_coords: None,
+            color: None,
         });
 
         let (min, max) = mesh.bounding_box().unwrap();
@@ -108,6 +110,7 @@ mod tests {
             position: Vec3::new(1.0, 2.0, 3.0),
             normal: None,
             tex_coords: None,
+            color: None,
         });
 
         let (width, height, depth) = mesh.dimensions().unwrap();
@@ -137,6 +140,7 @@ mod tests {
                 position: pos,
                 normal: None,
                 tex_coords: None,
+                color: None,
             });
         }
 
@@ -166,6 +170,7 @@ mod tests {
                 position: pos,
                 normal: None,
                 tex_coords: None,
+                color: None,
             });
         }
 
@@ -183,11 +188,13 @@ mod tests {
             position: Vec3::new(0.0, 0.0, 0.0),
             normal: None,
             tex_coords: None,
+            color: None,
         });
         mesh.vertices.push(Vertex {
             position: Vec3::new(2.0, 3.0, 1.5),
             normal: None,
             tex_coords: None,
+            color: None,
         });
 
         let (width, height, depth) = mesh.dimensions().unwrap();

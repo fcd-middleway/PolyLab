@@ -6,11 +6,12 @@ use wgpu;
 use wgpu::util::DeviceExt;
 use polylab_core::Mesh;
 
-/// Vertex format for GPU rendering (position only for now)
+/// Vertex format for GPU rendering (position + color)
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GpuVertex {
     pub position: [f32; 3],
+    pub color: [f32; 3],  // RGB color
 }
 
 impl GpuVertex {
@@ -24,6 +25,12 @@ impl GpuVertex {
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                // Color attribute (location = 1)
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],
@@ -45,12 +52,17 @@ impl MeshGPU {
     /// Vertices are stored as tightly packed [f32; 3] positions.
     /// Indices are flattened face data (3 indices per triangle).
     pub fn from_mesh(device: &wgpu::Device, mesh: &Mesh) -> Self {
-        // Convert vertices to GPU format (position only for now)
+        // Convert vertices to GPU format (position + color)
         let gpu_vertices: Vec<GpuVertex> = mesh
             .vertices
             .iter()
-            .map(|v| GpuVertex {
-                position: [v.position.x, v.position.y, v.position.z],
+            .map(|v| {
+                // Use vertex color if available, otherwise default to light gray
+                let color = v.color.unwrap_or(glam::Vec3::new(0.7, 0.7, 0.7));
+                GpuVertex {
+                    position: [v.position.x, v.position.y, v.position.z],
+                    color: [color.x, color.y, color.z],
+                }
             })
             .collect();
 
@@ -91,9 +103,9 @@ impl MeshGPU {
 
         let mesh = Mesh {
             vertices: vec![
-                Vertex { position: Vec3::new(-0.5, -0.5, 0.0), normal: None, tex_coords: None },
-                Vertex { position: Vec3::new(0.5, -0.5, 0.0), normal: None, tex_coords: None },
-                Vertex { position: Vec3::new(0.0, 0.5, 0.0), normal: None, tex_coords: None },
+                Vertex { position: Vec3::new(-0.5, -0.5, 0.0), normal: None, tex_coords: None, color: None },
+                Vertex { position: Vec3::new(0.5, -0.5, 0.0), normal: None, tex_coords: None, color: None },
+                Vertex { position: Vec3::new(0.0, 0.5, 0.0), normal: None, tex_coords: None, color: None },
             ],
             faces: vec![
                 Face { vertices: [0, 1, 2] }
@@ -116,9 +128,10 @@ mod tests {
     #[test]
     fn test_gpu_vertex_layout() {
         let layout = GpuVertex::desc();
-        assert_eq!(layout.array_stride, 12); // 3 floats * 4 bytes
-        assert_eq!(layout.attributes.len(), 1);
+        assert_eq!(layout.array_stride, 24); // 6 floats * 4 bytes (position + color)
+        assert_eq!(layout.attributes.len(), 2);
         assert_eq!(layout.attributes[0].shader_location, 0);
+        assert_eq!(layout.attributes[1].shader_location, 1);
     }
 
     #[test]
@@ -127,13 +140,17 @@ mod tests {
             position: Vec3::new(1.0, 2.0, 3.0),
             normal: None,
             tex_coords: None,
+            color: Some(Vec3::new(0.5, 0.6, 0.7)),
         };
 
+        let color = cpu_vertex.color.unwrap_or(Vec3::new(0.7, 0.7, 0.7));
         let gpu_vertex = GpuVertex {
             position: [cpu_vertex.position.x, cpu_vertex.position.y, cpu_vertex.position.z],
+            color: [color.x, color.y, color.z],
         };
 
         assert_eq!(gpu_vertex.position, [1.0, 2.0, 3.0]);
+        assert_eq!(gpu_vertex.color, [0.5, 0.6, 0.7]);
     }
 
     #[test]
@@ -155,8 +172,11 @@ mod tests {
     #[test]
     fn test_bytemuck_pod() {
         // Verify GpuVertex can be safely cast to bytes
-        let vertex = GpuVertex { position: [1.0, 2.0, 3.0] };
+        let vertex = GpuVertex { 
+            position: [1.0, 2.0, 3.0],
+            color: [0.5, 0.5, 0.5],
+        };
         let bytes: &[u8] = bytemuck::bytes_of(&vertex);
-        assert_eq!(bytes.len(), 12); // 3 floats * 4 bytes
+        assert_eq!(bytes.len(), 24); // 6 floats * 4 bytes (position + color)
     }
 }

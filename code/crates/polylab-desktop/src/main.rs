@@ -73,7 +73,7 @@ impl ApplicationHandler for App {
             
             WindowEvent::RedrawRequested => {
                 // Render frame
-                if let Some(viewer) = &self.viewer {
+                if let Some(viewer) = &mut self.viewer {
                     match viewer.renderer.render(&viewer.pipeline) {
                         Ok(_) => {
                             // Request next frame

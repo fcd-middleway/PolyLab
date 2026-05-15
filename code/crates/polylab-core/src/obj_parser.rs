@@ -176,6 +176,7 @@ pub fn parse_obj(content: &str) -> Result<Mesh, ObjParseError> {
         position: pos,
         normal: None,
         tex_coords: None,
+        color: None,  // OBJ files don't typically include per-vertex colors
     }).collect();
 
     Ok(Mesh {

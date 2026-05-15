@@ -6,6 +6,60 @@ use polylab_core::{Mesh, Vertex, Face};
 use glam::Vec3;
 use crate::perlin::PerlinNoise;
 
+/// Calculate terrain color based on normalized height (0.0 to 1.0)
+///
+/// Creates a color gradient mimicking natural terrain:
+/// - 0.00-0.30: Deep blue → Cyan (water)
+/// - 0.30-0.45: Yellow-green (beach/lowlands)
+/// - 0.45-0.65: Green (plains/forests)
+/// - 0.65-0.80: Brown-gray (mountains)
+/// - 0.80-1.00: White (snow peaks)
+fn calculate_terrain_color(height: f32) -> Vec3 {
+    let height = height.clamp(0.0, 1.0);
+    
+    if height < 0.30 {
+        // Water: deep blue → cyan
+        let t = height / 0.30;
+        Vec3::new(
+            0.0 + t * 0.2,      // R: 0.0 → 0.2
+            0.2 + t * 0.5,      // G: 0.2 → 0.7
+            0.6 + t * 0.3,      // B: 0.6 → 0.9
+        )
+    } else if height < 0.45 {
+        // Beach/lowlands: cyan → yellow-green
+        let t = (height - 0.30) / 0.15;
+        Vec3::new(
+            0.2 + t * 0.6,      // R: 0.2 → 0.8
+            0.7 + t * 0.2,      // G: 0.7 → 0.9
+            0.9 - t * 0.5,      // B: 0.9 → 0.4
+        )
+    } else if height < 0.65 {
+        // Plains/forests: yellow-green → dark green
+        let t = (height - 0.45) / 0.20;
+        Vec3::new(
+            0.8 - t * 0.6,      // R: 0.8 → 0.2
+            0.9 - t * 0.3,      // G: 0.9 → 0.6
+            0.4 - t * 0.2,      // B: 0.4 → 0.2
+        )
+    } else if height < 0.80 {
+        // Mountains: dark green → brown-gray
+        let t = (height - 0.65) / 0.15;
+        Vec3::new(
+            0.2 + t * 0.3,      // R: 0.2 → 0.5
+            0.6 - t * 0.2,      // G: 0.6 → 0.4
+            0.2 + t * 0.1,      // B: 0.2 → 0.3
+        )
+    } else {
+        // Snow peaks: brown-gray → white
+        let t = (height - 0.80) / 0.20;
+        Vec3::new(
+            0.5 + t * 0.5,      // R: 0.5 → 1.0
+            0.4 + t * 0.6,      // G: 0.4 → 1.0
+            0.3 + t * 0.7,      // B: 0.3 → 1.0
+        )
+    }
+}
+
 /// Parameters for terrain generation
 #[derive(Debug, Clone)]
 pub struct TerrainParams {
@@ -78,10 +132,15 @@ pub fn generate_terrain(params: &TerrainParams) -> Mesh {
             // Map noise from [-1, 1] to [height_min, height_max]
             let height = params.height_min + (noise_value + 1.0) * 0.5 * (params.height_max - params.height_min);
             
+            // Calculate color based on normalized height (0.0 = min, 1.0 = max)
+            let height_normalized = (height - params.height_min) / (params.height_max - params.height_min);
+            let color = calculate_terrain_color(height_normalized);
+            
             mesh.vertices.push(Vertex {
                 position: Vec3::new(x, height, z),
                 normal: None,
                 tex_coords: None,
+                color: Some(color),
             });
         }
     }

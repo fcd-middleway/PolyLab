@@ -22,6 +22,7 @@ struct VertexOutput {
 @vertex
 fn vs_main(
     @location(0) position: vec3<f32>,  // Position from vertex buffer
+    @location(1) color: vec3<f32>,     // Color from vertex buffer
     @builtin(vertex_index) in_vertex_index: u32
 ) -> VertexOutput {
     var out: VertexOutput;
@@ -32,9 +33,8 @@ fn vs_main(
     // Store world position for future lighting calculations
     out.world_pos = position;
     
-    // Per-vertex colors based on position (for now)
-    // TODO: Read colors from vertex buffer or apply proper lighting
-    out.color = normalize(position) * 0.5 + 0.5;  // Map [-1,1] to [0,1] RGB
+    // Pass through vertex color (interpolated by GPU across triangles)
+    out.color = color;
     
     return out;
 }

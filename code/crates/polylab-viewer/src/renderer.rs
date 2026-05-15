@@ -7,6 +7,7 @@ use wgpu;
 use crate::constants;
 use crate::webgpu_context::WebGpuContext;
 use crate::mesh_gpu::MeshGPU;
+use crate::camera::Camera;
 use std::collections::HashMap;
 
 // Desktop-specific imports
@@ -29,6 +30,8 @@ pub struct Renderer {
     view_uniform_buffer: wgpu::Buffer,
     view_bind_group: wgpu::BindGroup,
     meshes: HashMap<String, MeshEntry>,
+    camera: Camera,
+    aspect_ratio: f32,
 }
 
 impl Renderer {
@@ -37,9 +40,13 @@ impl Renderer {
     pub async fn new(canvas: web_sys::HtmlCanvasElement) -> Result<Self, String> {
         let context = WebGpuContext::new(canvas).await?;
         
-        // Create uniform buffer for aspect ratio
+        // Create camera
+        let camera = Camera::new();
         let aspect_ratio = context.size.0 as f32 / context.size.1 as f32;
-        let view_uniform_buffer = Self::create_view_uniform_buffer(&context.device, aspect_ratio);
+        
+        // Create uniform buffer for view-projection matrix
+        let view_proj_matrix = camera.view_projection_matrix(aspect_ratio);
+        let view_uniform_buffer = Self::create_view_uniform_buffer(&context.device, &view_proj_matrix);
         
         // Create bind group layout
         let bind_group_layout = Self::create_bind_group_layout(&context.device);
@@ -64,6 +71,8 @@ impl Renderer {
             view_uniform_buffer,
             view_bind_group,
             meshes,
+            camera,
+            aspect_ratio,
         })
     }
 
@@ -72,9 +81,13 @@ impl Renderer {
     pub async fn new_native(window: Arc<winit::window::Window>) -> Result<Self, String> {
         let context = WebGpuContext::new_native(window).await?;
         
-        // Create uniform buffer for aspect ratio
+        // Create camera
+        let camera = Camera::new();
         let aspect_ratio = context.size.0 as f32 / context.size.1 as f32;
-        let view_uniform_buffer = Self::create_view_uniform_buffer(&context.device, aspect_ratio);
+        
+        // Create uniform buffer for view-projection matrix
+        let view_proj_matrix = camera.view_projection_matrix(aspect_ratio);
+        let view_uniform_buffer = Self::create_view_uniform_buffer(&context.device, &view_proj_matrix);
         
         // Create bind group layout
         let bind_group_layout = Self::create_bind_group_layout(&context.device);
@@ -99,6 +112,8 @@ impl Renderer {
             view_uniform_buffer,
             view_bind_group,
             meshes,
+            camera,
+            aspect_ratio,
         })
     }
 
@@ -151,13 +166,16 @@ impl Renderer {
         })
     }
 
-    /// Create uniform buffer with initial aspect ratio
-    fn create_view_uniform_buffer(device: &wgpu::Device, aspect_ratio: f32) -> wgpu::Buffer {
+    /// Create uniform buffer with initial view-projection matrix
+    fn create_view_uniform_buffer(device: &wgpu::Device, view_proj_matrix: &glam::Mat4) -> wgpu::Buffer {
         use wgpu::util::DeviceExt;
+        
+        // Convert Mat4 to array of 16 f32 values
+        let matrix_data: &[f32; 16] = view_proj_matrix.as_ref();
         
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("View Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[aspect_ratio]),
+            contents: bytemuck::cast_slice(matrix_data),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         })
     }
@@ -259,7 +277,16 @@ impl Renderer {
     ///
     /// Acquires surface texture → creates command encoder → records render pass → submits to GPU.
     /// Returns error if surface is lost/outdated (needs resize) or validation fails.
-    pub fn render(&self, pipeline: &wgpu::RenderPipeline) -> Result<(), String> {
+    pub fn render(&mut self, pipeline: &wgpu::RenderPipeline) -> Result<(), String> {
+        // Update view-projection matrix uniform
+        let view_proj_matrix = self.camera.view_projection_matrix(self.aspect_ratio);
+        let matrix_data: &[f32; 16] = view_proj_matrix.as_ref();
+        self.context.queue.write_buffer(
+            &self.view_uniform_buffer,
+            0,
+            bytemuck::cast_slice(matrix_data),
+        );
+        
         // Acquire next frame from swapchain
         let output = match self.context.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
@@ -331,12 +358,65 @@ impl Renderer {
     pub fn resize(&mut self, new_width: u32, new_height: u32) {
         self.context.resize(new_width, new_height);
         
-        // Update aspect ratio uniform
-        let aspect_ratio = new_width as f32 / new_height as f32;
-        self.context.queue.write_buffer(
-            &self.view_uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[aspect_ratio]),
-        );
+        // Update aspect ratio
+        self.aspect_ratio = new_width as f32 / new_height as f32;
+        
+        // View-projection matrix will be updated on next render() call
+    }
+    
+    // ========================
+    // Camera Control Methods
+    // ========================
+    
+    /// Move camera forward/backward (positive = forward)
+    pub fn camera_move_forward(&mut self, delta: f32) {
+        self.camera.move_forward(delta);
+    }
+    
+    /// Move camera right/left (positive = right)
+    pub fn camera_move_right(&mut self, delta: f32) {
+        self.camera.move_right(delta);
+    }
+    
+    /// Move camera up/down (positive = up)
+    pub fn camera_move_up(&mut self, delta: f32) {
+        self.camera.move_up(delta);
+    }
+    
+    /// Rotate camera yaw (left/right) in radians
+    pub fn camera_rotate_yaw(&mut self, delta: f32) {
+        self.camera.rotate_yaw(delta);
+    }
+    
+    /// Rotate camera pitch (up/down) in radians
+    pub fn camera_rotate_pitch(&mut self, delta: f32) {
+        self.camera.rotate_pitch(delta);
+    }
+    
+    /// Set camera position
+    pub fn camera_set_position(&mut self, x: f32, y: f32, z: f32) {
+        self.camera.set_position(glam::Vec3::new(x, y, z));
+    }
+    
+    /// Get camera position
+    pub fn camera_position(&self) -> (f32, f32, f32) {
+        let pos = self.camera.position();
+        (pos.x, pos.y, pos.z)
+    }
+    
+    /// Set orbital rotation target
+    pub fn camera_set_orbit_target(&mut self, x: f32, y: f32, z: f32) {
+        self.camera.set_orbit_target(glam::Vec3::new(x, y, z));
+    }
+    
+    /// Get orbital rotation target
+    pub fn camera_orbit_target(&self) -> (f32, f32, f32) {
+        let target = self.camera.orbit_target();
+        (target.x, target.y, target.z)
+    }
+    
+    /// Orbit camera around target point
+    pub fn camera_orbit_around(&mut self, delta_yaw: f32, delta_pitch: f32) {
+        self.camera.orbit_around(delta_yaw, delta_pitch);
     }
 }

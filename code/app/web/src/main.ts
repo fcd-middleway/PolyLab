@@ -9,6 +9,7 @@ import { ProjectManager } from './core/ProjectManager';
 import { UIManager } from './core/UIManager';
 import { ViewerProject } from './projects/ViewerProject';
 import { PerlinProject } from './projects/PerlinProject';
+import { CameraControls } from './utils/cameraControls';
 import { appLogger, viewerLogger } from './utils/logger';
 
 // Import styles
@@ -134,6 +135,13 @@ async function main() {
         const viewer = await initializeViewer(canvas, ui.statusBar);
 
         // ========================
+        // Camera Controls Setup
+        // ========================
+        const cameraControls = new CameraControls(viewer);
+        cameraControls.enable();
+        appLogger.info('Camera controls enabled');
+
+        // ========================
         // Project System Setup
         // ========================
         appLogger.info('Initializing project system...');
@@ -208,6 +216,9 @@ async function main() {
                 const currentTime = performance.now();
                 const deltaTime = (currentTime - lastTime) / 1000; // in seconds
 
+                // Update camera controls
+                cameraControls.update(deltaTime);
+                
                 // Render viewer
                 viewer.render();
                 

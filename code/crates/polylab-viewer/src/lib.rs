@@ -8,11 +8,13 @@ mod webgpu_context;
 mod pipeline;
 mod renderer;
 mod mesh_gpu;
+mod camera;
 
 // Public exports for desktop usage
 pub use pipeline::create_render_pipeline;
 pub use renderer::Renderer;
 pub use mesh_gpu::{MeshGPU, GpuVertex};
+pub use camera::Camera;
 
 // WASM-specific code
 #[cfg(target_arch = "wasm32")]
@@ -96,7 +98,7 @@ impl ViewerHandle {
     /// Call this every frame from requestAnimationFrame in JS.
     /// Returns error if surface is lost (needs resize).
     #[wasm_bindgen]
-    pub fn render(&self) -> Result<(), JsValue> {
+    pub fn render(&mut self) -> Result<(), JsValue> {
         self.renderer
             .render(&self.pipeline)
             .map_err(|e| JsValue::from_str(&e))
@@ -282,6 +284,98 @@ impl ViewerHandle {
             size_y,
             size_z,
         ]
+    }
+    
+    // ========================
+    // Camera Control Methods
+    // ========================
+    
+    /// Move camera forward/backward
+    ///
+    /// Positive delta moves forward, negative moves backward.
+    /// Delta is multiplied by camera move_speed and deltaTime in the update loop.
+    #[wasm_bindgen]
+    pub fn camera_move_forward(&mut self, delta: f32) {
+        self.renderer.camera_move_forward(delta);
+    }
+    
+    /// Move camera right/left
+    ///
+    /// Positive delta moves right, negative moves left.
+    #[wasm_bindgen]
+    pub fn camera_move_right(&mut self, delta: f32) {
+        self.renderer.camera_move_right(delta);
+    }
+    
+    /// Move camera up/down
+    ///
+    /// Positive delta moves up, negative moves down.
+    #[wasm_bindgen]
+    pub fn camera_move_up(&mut self, delta: f32) {
+        self.renderer.camera_move_up(delta);
+    }
+    
+    /// Rotate camera yaw (left/right) in radians
+    ///
+    /// Positive delta rotates right, negative rotates left.
+    #[wasm_bindgen]
+    pub fn camera_rotate_yaw(&mut self, delta: f32) {
+        self.renderer.camera_rotate_yaw(delta);
+    }
+    
+    /// Rotate camera pitch (up/down) in radians
+    ///
+    /// Positive delta rotates up, negative rotates down.
+    /// Pitch is automatically clamped to avoid gimbal lock.
+    #[wasm_bindgen]
+    pub fn camera_rotate_pitch(&mut self, delta: f32) {
+        self.renderer.camera_rotate_pitch(delta);
+    }
+    
+    /// Set camera position
+    #[wasm_bindgen]
+    pub fn camera_set_position(&mut self, x: f32, y: f32, z: f32) {
+        self.renderer.camera_set_position(x, y, z);
+    }
+    
+    /// Get camera position
+    ///
+    /// Returns [x, y, z] as a JavaScript array.
+    #[wasm_bindgen]
+    pub fn camera_position(&self) -> Vec<f32> {
+        let (x, y, z) = self.renderer.camera_position();
+        vec![x, y, z]
+    }
+    
+    /// Set orbital rotation target point
+    ///
+    /// Sets the point around which the camera orbits when using mouse drag.
+    /// Default is origin (0, 0, 0).
+    #[wasm_bindgen]
+    pub fn camera_set_orbit_target(&mut self, x: f32, y: f32, z: f32) {
+        self.renderer.camera_set_orbit_target(x, y, z);
+    }
+    
+    /// Get orbital rotation target point
+    ///
+    /// Returns [x, y, z] as a JavaScript array.
+    #[wasm_bindgen]
+    pub fn camera_orbit_target(&self) -> Vec<f32> {
+        let (x, y, z) = self.renderer.camera_orbit_target();
+        vec![x, y, z]
+    }
+    
+    /// Orbit camera around target point
+    ///
+    /// Rotates camera in a spherical arc around the orbit target.
+    /// Used for mouse-drag orbital rotation (typical 3D viewer behavior).
+    ///
+    /// # Parameters
+    /// * `delta_yaw` - Horizontal rotation in radians (positive = orbit right)
+    /// * `delta_pitch` - Vertical rotation in radians (positive = orbit up)
+    #[wasm_bindgen]
+    pub fn camera_orbit_around(&mut self, delta_yaw: f32, delta_pitch: f32) {
+        self.renderer.camera_orbit_around(delta_yaw, delta_pitch);
     }
 }
 

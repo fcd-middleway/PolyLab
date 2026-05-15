@@ -11,6 +11,12 @@
     border-bottom: 1px solid var(--border-color);
 }
 
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .toolbar-btn {
     display: flex;
     flex-direction: column;
@@ -25,7 +31,12 @@
     min-width: 60px;
 }
 
-.toolbar-btn:hover {
+.toolbar-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.toolbar-btn:hover:not(:disabled) {
     background: var(--accent-color);
     border-color: var(--accent-color);
     transform: translateY(-1px);
@@ -40,7 +51,7 @@
     color: var(--text-secondary);
 }
 
-.toolbar-btn:hover .label {
+.toolbar-btn:hover:not(:disabled) .label {
     color: var(--text-primary);
 }
 

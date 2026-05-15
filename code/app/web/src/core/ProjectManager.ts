@@ -11,17 +11,25 @@ import { appLogger } from '../utils/logger';
 export class ProjectManager {
     private projects: Map<string, BaseProject> = new Map();
     private currentProject: BaseProject | null = null;
-    private viewer: any; // ViewerHandle from WASM
-    private onProjectChange?: (projectId: string) => void;
+    private viewer: any = null; // ViewerHandle from WASM
+    private onProjectChange?: (project: BaseProject) => void;
 
     /**
      * Create a new ProjectManager
+     */
+    constructor() {
+        appLogger.info('ProjectManager initialized');
+    }
+
+    /**
+     * Set the viewer instance
+     * Must be called after viewer initialization
      * 
      * @param viewer - The WebGPU viewer instance
      */
-    constructor(viewer: any) {
+    setViewer(viewer: any): void {
         this.viewer = viewer;
-        appLogger.info('ProjectManager initialized');
+        appLogger.debug('Viewer set in ProjectManager');
     }
 
     /**
@@ -57,8 +65,10 @@ export class ProjectManager {
     /**
      * Set callback for project changes
      * Used to notify UI when project switches
+     * 
+     * @param callback - Called with the newly activated project
      */
-    setOnProjectChange(callback: (projectId: string) => void): void {
+    setOnProjectChange(callback: (project: BaseProject) => void): void {
         this.onProjectChange = callback;
     }
 
@@ -93,6 +103,10 @@ export class ProjectManager {
 
         // Activate new project
         try {
+            if (!this.viewer) {
+                throw new Error('Viewer not set in ProjectManager. Call setViewer() first.');
+            }
+            
             await project.init(this.viewer);
             project.setActive(true);
             project.onActivate?.();
@@ -101,7 +115,7 @@ export class ProjectManager {
             appLogger.info(`Project activated: ${project.getName()}`);
 
             // Notify UI
-            this.onProjectChange?.(projectId);
+            this.onProjectChange?.(project);
         } catch (error) {
             appLogger.error(`Failed to switch to project '${projectId}'`, { error });
             throw error;

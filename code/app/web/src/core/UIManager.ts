@@ -51,13 +51,8 @@ export class UIManager {
      * Reconfigure toolbar with new actions
      */
     private reconfigureToolbar(actions: ToolbarAction[]): void {
-        // For now, we'll keep the existing toolbar buttons
-        // In Step 3, we'll refactor Toolbar to accept dynamic config
-        
-        uiLogger.debug(`Toolbar configuration: ${actions.length} actions`);
-        
-        // TODO: Clear existing buttons
-        // TODO: Add new buttons from actions
+        uiLogger.debug(`Configuring toolbar with ${actions.length} actions`);
+        this.toolbar.setActions(actions);
     }
 
     /**

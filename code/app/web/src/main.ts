@@ -5,7 +5,10 @@ import { MeshPanel } from './components/MeshPanel';
 import { DetailsPanel } from './components/DetailsPanel';
 import { StatusBar } from './components/StatusBar';
 import { ViewerCanvas } from './components/ViewerCanvas';
-import { appLogger, viewerLogger, meshLogger } from './utils/logger';
+import { ProjectManager } from './core/ProjectManager';
+import { UIManager } from './core/UIManager';
+import { ViewerProject } from './projects/ViewerProject';
+import { appLogger, viewerLogger } from './utils/logger';
 
 // Import styles
 import './styles/main.css';
@@ -79,40 +82,13 @@ async function initializeViewer(canvas: HTMLCanvasElement, statusBar: StatusBar)
         viewerLogger.info('ViewerHandle created successfully');
 
         statusBar.updateStats({ 
-            status: '✅ Rendering!',
+            status: '✅ Ready',
             backend: 'WebGPU'
         });
 
-        // FPS counter
-        let frameCount = 0;
-        let lastTime = performance.now();
+        viewerLogger.info('Viewer initialized successfully');
 
-        // Animation loop
-        function animate() {
-            try {
-                viewer.render();
-                
-                // Update FPS
-                frameCount++;
-                const currentTime = performance.now();
-                if (currentTime - lastTime >= 1000) {
-                    const fps = Math.round(frameCount * 1000 / (currentTime - lastTime));
-                    statusBar.updateStats({ fps });
-                    frameCount = 0;
-                    lastTime = currentTime;
-                }
-
-                requestAnimationFrame(animate);
-            } catch (e) {
-                viewerLogger.error('Render error', { error: e });
-                statusBar.updateStats({ status: `❌ Error: ${e}` });
-            }
-        }
-
-        animate();
-        viewerLogger.info('Animation loop started');
-
-        // Return viewer handle for mesh loading
+        // Return viewer handle
         return viewer;
 
     } catch (error) {
@@ -156,86 +132,95 @@ async function main() {
     try {
         const viewer = await initializeViewer(canvas, ui.statusBar);
 
-        // Initialize DetailsPanel with default triangle info
-        const initialDetails = viewer.mesh_details(null);
-        const [initVertices, initTriangles, initSizeX, initSizeY, initSizeZ] = initialDetails;
-        ui.detailsPanel.updateDetails({
-            vertices: Math.round(initVertices),
-            triangles: Math.round(initTriangles),
-            sizeX: initSizeX,
-            sizeY: initSizeY,
-            sizeZ: initSizeZ
-        });
+        // ========================
+        // Project System Setup
+        // ========================
+        appLogger.info('Initializing project system...');
 
-        // Set up visibility toggle callback for all meshes
-        ui.meshPanel.setVisibilityCallback((id: string, visible: boolean) => {
-            viewer.set_mesh_visibility(id, visible);
-            meshLogger.debug(`Mesh visibility changed`, { meshId: id, visible });
-        });
+        // Create ProjectManager and set viewer
+        const projectManager = new ProjectManager();
+        projectManager.setViewer(viewer);
 
-        // Setup mesh loading callbacks
-        ui.toolbar.setLoadCallback(
-            // onLoad callback
-            async (objContent: string, filename: string) => {
-                try {
-                    meshLogger.info('Loading mesh', { filename, size: objContent.length });
-                    ui.statusBar.updateStats({ status: `Loading ${filename}...` });
-                    
-                    // Generate unique mesh ID
-                    const meshId = `mesh-${Date.now()}`;
-                    meshLogger.debug('Generated mesh ID', { meshId, filename });
-                    
-                    // Call WASM function to load mesh
-                    viewer.load_mesh(meshId, objContent);
-                    
-                    // Get detailed mesh info from viewer
-                    const details = viewer.mesh_details(meshId);
-                    const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
-                    
-                    // Add mesh to MeshPanel with visibility callback
-                    ui.meshPanel.addMesh({
-                        id: meshId,
-                        name: filename,
-                        vertices: Math.round(vertices),
-                        triangles: Math.round(triangles),
-                        visible: true
-                    });
-                    
-                    // Update DetailsPanel with dimensions
-                    ui.detailsPanel.updateDetails({
-                        vertices: Math.round(vertices),
-                        triangles: Math.round(triangles),
-                        sizeX,
-                        sizeY,
-                        sizeZ
-                    });
-                    
-                    // Update status bar
-                    ui.statusBar.updateStats({ 
-                        status: `✅ Loaded ${filename}`,
-                        vertices: Math.round(vertices),
-                        triangles: Math.round(triangles)
-                    });
-                    
-                    meshLogger.info('Mesh loaded successfully', { 
-                        meshId,
-                        filename, 
-                        vertices: Math.round(vertices), 
-                        triangles: Math.round(triangles),
-                        dimensions: [sizeX, sizeY, sizeZ]
-                    });
-                } catch (error) {
-                    const errorMsg = error instanceof Error ? error.message : String(error);
-                    meshLogger.error('Failed to load mesh', { filename, error: errorMsg });
-                    ui.statusBar.updateStats({ status: `❌ ${errorMsg}` });
-                }
-            },
-            // onError callback
-            (error: string) => {
-                meshLogger.error('File loading error', { error });
-                ui.statusBar.updateStats({ status: `❌ ${error}` });
+        // Create UIManager
+        const uiManager = new UIManager(ui.toolbar);
+
+        // Create ViewerProject
+        const viewerProject = new ViewerProject();
+        
+        // Inject UI components into ViewerProject
+        viewerProject.setUIComponents(ui.meshPanel, ui.detailsPanel, ui.statusBar);
+        
+        // Initialize ViewerProject with viewer
+        await viewerProject.init(viewer);
+        
+        // Register project
+        projectManager.registerProject(viewerProject);
+        appLogger.info('ViewerProject registered');
+
+        // Configure header with available projects
+        const projects = projectManager.getProjects();
+        ui.header.setProjects(projects.map(p => ({
+            id: p.getId(),
+            name: p.getName(),
+            icon: p.getConfig().icon || '📦'
+        })));
+
+        // Connect header to ProjectManager for project switching
+        ui.header.setOnProjectChange(async (projectId: string) => {
+            appLogger.info('Switching project', { projectId });
+            try {
+                await projectManager.switchToProject(projectId);
+            } catch (error) {
+                appLogger.error('Failed to switch project', { projectId, error });
             }
-        );
+        });
+
+        // Connect ProjectManager to UIManager for UI updates
+        projectManager.setOnProjectChange((project) => {
+            ui.header.setActiveProject(project.getId());
+            uiManager.applyConfig(project.getConfig());
+            appLogger.debug('UI updated for project', { projectId: project.getId() });
+        });
+
+        // Activate default project (Viewer)
+        await projectManager.switchToProject('viewer');
+        appLogger.info('Default project activated');
+
+        // ========================
+        // Animation Loop
+        // ========================
+        let frameCount = 0;
+        let lastTime = performance.now();
+
+        function animate() {
+            try {
+                const currentTime = performance.now();
+                const deltaTime = (currentTime - lastTime) / 1000; // in seconds
+
+                // Render viewer
+                viewer.render();
+                
+                // Update active project
+                projectManager.update(deltaTime);
+                
+                // Update FPS counter
+                frameCount++;
+                if (currentTime - lastTime >= 1000) {
+                    const fps = Math.round(frameCount * 1000 / (currentTime - lastTime));
+                    ui.statusBar.updateStats({ fps });
+                    frameCount = 0;
+                    lastTime = currentTime;
+                }
+
+                requestAnimationFrame(animate);
+            } catch (e) {
+                viewerLogger.error('Render error', { error: e });
+                ui.statusBar.updateStats({ status: `❌ Error: ${e}` });
+            }
+        }
+
+        animate();
+        appLogger.info('Animation loop started');
 
         appLogger.info('Application initialized successfully');
     } catch (error) {

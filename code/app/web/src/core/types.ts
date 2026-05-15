@@ -6,7 +6,7 @@
  * Menu item definition
  */
 export interface MenuItem {
-    label: string;
+    label?: string;
     action?: () => void;
     submenu?: MenuItem[];
     separator?: boolean;

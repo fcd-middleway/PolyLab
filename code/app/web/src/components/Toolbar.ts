@@ -1,14 +1,17 @@
 import type { UIComponent } from '../types/ui.types';
+import type { ToolbarAction } from '../core/types';
 import { createFileInput, setupDropZone, type MeshLoadCallback, type ErrorCallback } from '../utils/meshLoader';
 
 /**
- * Toolbar component - Action buttons bar
+ * Toolbar component - Dynamic action buttons bar
  */
 export class Toolbar implements UIComponent {
     element: HTMLElement;
     private fileInput: HTMLInputElement | null = null;
     private onLoadCallback: MeshLoadCallback | null = null;
     private onErrorCallback: ErrorCallback | null = null;
+    private actionsContainer: HTMLElement | null = null;
+    private currentActions: Map<string, ToolbarAction> = new Map();
 
     constructor() {
         this.element = this.createElement();
@@ -38,101 +41,117 @@ export class Toolbar implements UIComponent {
         }
     }
 
+    /**
+     * Set toolbar actions dynamically
+     * Called by UIManager when project changes
+     * 
+     * @param actions - Array of toolbar actions to display
+     */
+    public setActions(actions: ToolbarAction[]): void {
+        if (!this.actionsContainer) {
+            console.warn('[Toolbar] Actions container not found');
+            return;
+        }
+
+        // Clear current actions
+        this.actionsContainer.innerHTML = '';
+        this.currentActions.clear();
+
+        // Create buttons for each action
+        actions.forEach(action => {
+            const button = document.createElement('button');
+            button.className = 'toolbar-btn';
+            button.id = `toolbar-${action.id}`;
+            button.title = action.tooltip;
+            button.disabled = action.enabled === false;
+
+            button.innerHTML = `
+                <span class="icon">${action.icon}</span>
+                <span class="label">${action.tooltip}</span>
+            `;
+
+            button.addEventListener('click', () => {
+                if (!button.disabled) {
+                    action.action();
+                }
+            });
+
+            this.actionsContainer!.appendChild(button);
+            this.currentActions.set(action.id, action);
+        });
+    }
+
+    /**
+     * Update a specific action (e.g., enable/disable)
+     * 
+     * @param actionId - ID of the action to update
+     * @param updates - Partial action updates
+     */
+    public updateAction(actionId: string, updates: Partial<ToolbarAction>): void {
+        const button = this.element.querySelector(`#toolbar-${actionId}`) as HTMLButtonElement;
+        if (!button) return;
+
+        const action = this.currentActions.get(actionId);
+        if (!action) return;
+
+        // Update action properties
+        Object.assign(action, updates);
+
+        // Update button
+        if (updates.enabled !== undefined) {
+            button.disabled = !updates.enabled;
+        }
+        if (updates.icon) {
+            const iconSpan = button.querySelector('.icon');
+            if (iconSpan) iconSpan.textContent = updates.icon;
+        }
+        if (updates.tooltip) {
+            button.title = updates.tooltip;
+            const labelSpan = button.querySelector('.label');
+            if (labelSpan) labelSpan.textContent = updates.tooltip;
+        }
+    }
+
     private createElement(): HTMLElement {
         const toolbar = document.createElement('div');
         toolbar.className = 'toolbar';
 
         toolbar.innerHTML = `
-            <button class="toolbar-btn" id="load-btn" title="Load mesh file">
-                <span class="icon">📁</span>
-                <span class="label">Load</span>
-            </button>
-            <button class="toolbar-btn" id="rotate-btn" title="Rotate view">
-                <span class="icon">🔄</span>
-                <span class="label">Rotate</span>
-            </button>
-            <button class="toolbar-btn" id="screenshot-btn" title="Take screenshot">
-                <span class="icon">📷</span>
-                <span class="label">Screenshot</span>
-            </button>
-            <button class="toolbar-btn" id="measure-btn" title="Measure">
-                <span class="icon">📏</span>
-                <span class="label">Measure</span>
-            </button>
-            <button class="toolbar-btn" id="settings-btn" title="Settings">
-                <span class="icon">⚙️</span>
-                <span class="label">Settings</span>
-            </button>
+            <div class="toolbar-actions" id="toolbar-actions">
+                <!-- Dynamic buttons will be inserted here -->
+            </div>
             <div class="toolbar-divider"></div>
             <div class="drop-zone" id="drop-zone">
                 Drag & drop .obj files or click to browse
             </div>
         `;
 
+        this.actionsContainer = toolbar.querySelector('#toolbar-actions');
+
         return toolbar;
     }
 
     private attachEventListeners(): void {
-        // Load button
-        this.element.querySelector('#load-btn')?.addEventListener('click', () => {
-            console.log('[Toolbar] Load button clicked');
+        // Click on drop zone triggers file picker
+        const dropZone = this.element.querySelector('#drop-zone');
+        dropZone?.addEventListener('click', () => {
             if (this.fileInput) {
                 this.fileInput.click();
             } else {
                 console.warn('[Toolbar] File input not initialized yet. Viewer might not be ready.');
             }
         });
-
-        // Rotate button
-        this.element.querySelector('#rotate-btn')?.addEventListener('click', () => {
-            console.log('[Toolbar] Rotate button clicked');
-        });
-
-        // Screenshot button
-        this.element.querySelector('#screenshot-btn')?.addEventListener('click', () => {
-            console.log('[Toolbar] Screenshot button clicked');
-        });
-
-        // Measure button
-        this.element.querySelector('#measure-btn')?.addEventListener('click', () => {
-            console.log('[Toolbar] Measure button clicked');
-        });
-
-        // Settings button
-        this.element.querySelector('#settings-btn')?.addEventListener('click', () => {
-            console.log('[Toolbar] Settings button clicked');
-        });
-
-        // Drop zone click (same as Load button)
-        const dropZone = this.element.querySelector('#drop-zone');
-        dropZone?.addEventListener('click', () => {
-            console.log('[Toolbar] Drop zone clicked');
-            if (this.fileInput) {
-                this.fileInput.click();
-            }
-        });
-
-        dropZone?.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            (e.currentTarget as HTMLElement).classList.add('drag-over');
-        });
-
-        dropZone?.addEventListener('dragleave', (e) => {
-            (e.currentTarget as HTMLElement).classList.remove('drag-over');
-        });
-
-        dropZone?.addEventListener('drop', (e) => {
-            e.preventDefault();
-            (e.currentTarget as HTMLElement).classList.remove('drag-over');
-            console.log('[Toolbar] Files dropped:', (e as DragEvent).dataTransfer?.files);
-        });
     }
 
     render(): void {
-        // Toolbar is mostly static
+        // Toolbar renders dynamically via setActions()
     }
 
     destroy(): void {
+        if (this.fileInput) {
+            this.fileInput.remove();
+            this.fileInput = null;
+        }
         this.element.remove();
     }
 }

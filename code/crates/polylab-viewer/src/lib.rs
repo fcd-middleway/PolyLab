@@ -9,12 +9,14 @@ mod pipeline;
 mod renderer;
 mod mesh_gpu;
 mod camera;
+mod light;
 
 // Public exports for desktop usage
 pub use pipeline::create_render_pipeline;
 pub use renderer::Renderer;
 pub use mesh_gpu::{MeshGPU, GpuVertex};
 pub use camera::Camera;
+pub use light::DirectionalLight;
 
 // WASM-specific code
 #[cfg(target_arch = "wasm32")]
@@ -132,7 +134,7 @@ impl ViewerHandle {
         log::debug!("OBJ content size: {} bytes", obj_content.len());
         
         // Parse OBJ file
-        let mesh = polylab_core::obj_parser::parse_obj(obj_content)
+        let mut mesh = polylab_core::obj_parser::parse_obj(obj_content)
             .map_err(|e| {
                 log::error!("Failed to parse OBJ file '{}': {}", mesh_id, e);
                 JsValue::from_str(&format!("Failed to parse OBJ file: {}. Check that the file is a valid Wavefront OBJ format.", e))
@@ -140,10 +142,123 @@ impl ViewerHandle {
 
         log::debug!("Mesh parsed: {} vertices, {} faces", mesh.vertices.len(), mesh.faces.len());
         
+        // Calculate smooth normals if mesh doesn't have them
+        // (Many OBJ files don't include normal data)
+        let has_normals = mesh.vertices.iter().any(|v| v.normal.is_some());
+        if !has_normals {
+            log::debug!("Mesh '{}' has no normals, calculating smooth normals...", mesh_id);
+            mesh.calculate_smooth_normals();
+        }
+        
         // Add mesh to scene
         self.renderer.add_mesh(mesh_id.to_string(), mesh);
 
         log::info!("Mesh '{}' loaded successfully", mesh_id);
+        Ok(mesh_id.to_string())
+    }
+    
+    /// Load a mesh from OBJ content and position it at specified coordinates
+    ///
+    /// Similar to load_mesh() but translates the mesh to the given position.
+    ///
+    /// # Arguments
+    /// * `mesh_id` - Unique identifier for the mesh
+    /// * `obj_content` - OBJ file content as string
+    /// * `x`, `y`, `z` - Position coordinates to place the mesh
+    ///
+    /// # Returns
+    /// The mesh ID on success, or error if parsing fails
+    ///
+    /// Example usage from JS:
+    /// ```js
+    /// // Load cube at position (10, 0, 5)
+    /// viewer.load_mesh_at("cube", objContent, 10.0, 0.0, 5.0);
+    /// ```
+    #[wasm_bindgen]
+    pub fn load_mesh_at(&mut self, mesh_id: &str, obj_content: &str, x: f32, y: f32, z: f32) -> Result<String, JsValue> {
+        log::info!("Loading mesh '{}' at position ({}, {}, {})", mesh_id, x, y, z);
+        log::debug!("OBJ content size: {} bytes", obj_content.len());
+        
+        // Parse OBJ file
+        let mut mesh = polylab_core::obj_parser::parse_obj(obj_content)
+            .map_err(|e| {
+                log::error!("Failed to parse OBJ file '{}': {}", mesh_id, e);
+                JsValue::from_str(&format!("Failed to parse OBJ file: {}. Check that the file is a valid Wavefront OBJ format.", e))
+            })?;
+
+        log::debug!("Mesh parsed: {} vertices, {} faces", mesh.vertices.len(), mesh.faces.len());
+        
+        // Translate mesh to target position
+        mesh.translate(glam::Vec3::new(x, y, z));
+        log::debug!("Mesh translated to ({}, {}, {})", x, y, z);
+        
+        // Calculate smooth normals if mesh doesn't have them
+        let has_normals = mesh.vertices.iter().any(|v| v.normal.is_some());
+        if !has_normals {
+            log::debug!("Mesh '{}' has no normals, calculating smooth normals...", mesh_id);
+            mesh.calculate_smooth_normals();
+        }
+        
+        // Add mesh to scene
+        self.renderer.add_mesh(mesh_id.to_string(), mesh);
+
+        log::info!("Mesh '{}' loaded and positioned successfully", mesh_id);
+        Ok(mesh_id.to_string())
+    }
+    
+    /// Load a mesh from OBJ content, rotate it around Y axis, and position it
+    ///
+    /// Combines rotation and translation in one operation.
+    /// Rotation is applied first (around origin), then translation.
+    ///
+    /// # Arguments
+    /// * `mesh_id` - Unique identifier for the mesh
+    /// * `obj_content` - OBJ file content as string
+    /// * `x`, `y`, `z` - Position coordinates to place the mesh
+    /// * `rotation_y_degrees` - Rotation angle in degrees around Y axis (positive = counter-clockwise from above)
+    ///
+    /// # Returns
+    /// The mesh ID on success, or error if parsing fails
+    ///
+    /// Example usage from JS:
+    /// ```js
+    /// // Load rover at z=-10, rotated 90° to the right (face +Z direction)
+    /// viewer.load_mesh_at_rotated("rover", objContent, 0.0, 0.0, -10.0, 90.0);
+    /// ```
+    #[wasm_bindgen]
+    pub fn load_mesh_at_rotated(&mut self, mesh_id: &str, obj_content: &str, x: f32, y: f32, z: f32, rotation_y_degrees: f32) -> Result<String, JsValue> {
+        log::info!("Loading mesh '{}' at ({}, {}, {}) with Y rotation {}°", mesh_id, x, y, z, rotation_y_degrees);
+        log::debug!("OBJ content size: {} bytes", obj_content.len());
+        
+        // Parse OBJ file
+        let mut mesh = polylab_core::obj_parser::parse_obj(obj_content)
+            .map_err(|e| {
+                log::error!("Failed to parse OBJ file '{}': {}", mesh_id, e);
+                JsValue::from_str(&format!("Failed to parse OBJ file: {}. Check that the file is a valid Wavefront OBJ format.", e))
+            })?;
+
+        log::debug!("Mesh parsed: {} vertices, {} faces", mesh.vertices.len(), mesh.faces.len());
+        
+        // Rotate mesh first (around origin)
+        let angle_radians = rotation_y_degrees.to_radians();
+        mesh.rotate_y(angle_radians);
+        log::debug!("Mesh rotated by {}° around Y axis", rotation_y_degrees);
+        
+        // Then translate to target position
+        mesh.translate(glam::Vec3::new(x, y, z));
+        log::debug!("Mesh translated to ({}, {}, {})", x, y, z);
+        
+        // Calculate smooth normals if mesh doesn't have them
+        let has_normals = mesh.vertices.iter().any(|v| v.normal.is_some());
+        if !has_normals {
+            log::debug!("Mesh '{}' has no normals, calculating smooth normals...", mesh_id);
+            mesh.calculate_smooth_normals();
+        }
+        
+        // Add mesh to scene
+        self.renderer.add_mesh(mesh_id.to_string(), mesh);
+
+        log::info!("Mesh '{}' loaded, rotated, and positioned successfully", mesh_id);
         Ok(mesh_id.to_string())
     }
 

@@ -9,6 +9,7 @@ import { ProjectManager } from './core/ProjectManager';
 import { UIManager } from './core/UIManager';
 import { ViewerProject } from './projects/ViewerProject';
 import { PerlinProject } from './projects/PerlinProject';
+import { RoverProject } from './projects/RoverProject';
 import { CameraControls } from './utils/cameraControls';
 import { appLogger, viewerLogger } from './utils/logger';
 
@@ -175,6 +176,16 @@ async function main() {
         // Register PerlinProject (will be initialized when activated)
         projectManager.registerProject(perlinProject);
         appLogger.info('PerlinProject registered');
+
+        // Create RoverProject
+        const roverProject = new RoverProject();
+        
+        // Inject UI components into RoverProject
+        roverProject.setUIComponents(ui.meshPanel, ui.statusBar, ui.detailsPanel);
+        
+        // Register RoverProject (will be initialized when activated)
+        projectManager.registerProject(roverProject);
+        appLogger.info('RoverProject registered');
 
         // Configure header with available projects
         const projects = projectManager.getProjects();

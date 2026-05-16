@@ -167,6 +167,9 @@ pub fn generate_terrain(params: &TerrainParams) -> Mesh {
         }
     }
     
+    // Calculate smooth vertex normals from face normals
+    mesh.calculate_smooth_normals();
+    
     mesh
 }
 

@@ -1,0 +1,12 @@
+# Ground plane - 100x100 units
+# Centered at origin in XZ plane (Y=0)
+# Counter-clockwise winding when viewed from above (+Y)
+
+v -50.0 0.0 -50.0
+v 50.0 0.0 -50.0
+v 50.0 0.0 50.0
+v -50.0 0.0 50.0
+
+# Two triangles forming a square (CCW winding from above)
+f 1 4 2
+f 2 4 3

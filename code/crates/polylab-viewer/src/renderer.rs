@@ -8,6 +8,7 @@ use crate::constants;
 use crate::webgpu_context::WebGpuContext;
 use crate::mesh_gpu::MeshGPU;
 use crate::camera::Camera;
+use crate::light::DirectionalLight;
 use std::collections::HashMap;
 
 // Desktop-specific imports
@@ -28,9 +29,11 @@ struct MeshEntry {
 pub struct Renderer {
     context: WebGpuContext,
     view_uniform_buffer: wgpu::Buffer,
+    light_uniform_buffer: wgpu::Buffer,
     view_bind_group: wgpu::BindGroup,
     meshes: HashMap<String, MeshEntry>,
     camera: Camera,
+    light: DirectionalLight,
     aspect_ratio: f32,
 }
 
@@ -44,34 +47,33 @@ impl Renderer {
         let camera = Camera::new();
         let aspect_ratio = context.size.0 as f32 / context.size.1 as f32;
         
+        // Create default lighting (sun slightly angled from above-left-front)
+        let light = DirectionalLight::default_sun();
+        
         // Create uniform buffer for view-projection matrix
         let view_proj_matrix = camera.view_projection_matrix(aspect_ratio);
         let view_uniform_buffer = Self::create_view_uniform_buffer(&context.device, &view_proj_matrix);
+        
+        // Create uniform buffer for light
+        let light_uniform_buffer = Self::create_light_uniform_buffer(&context.device, &light);
         
         // Create bind group layout
         let bind_group_layout = Self::create_bind_group_layout(&context.device);
         
         // Create bind group
-        let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer);
+        let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer, &light_uniform_buffer);
         
         // Create empty mesh collection
-        let mut meshes = HashMap::new();
-        
-        // Add default triangle mesh
-        let default_mesh = Self::create_default_triangle_mesh();
-        let default_gpu = MeshGPU::from_mesh(&context.device, &default_mesh);
-        meshes.insert("__default__".to_string(), MeshEntry {
-            gpu_mesh: default_gpu,
-            cpu_mesh: default_mesh,
-            visible: true,
-        });
+        let meshes = HashMap::new();
         
         Ok(Self { 
             context,
             view_uniform_buffer,
+            light_uniform_buffer,
             view_bind_group,
             meshes,
             camera,
+            light,
             aspect_ratio,
         })
     }
@@ -85,87 +87,65 @@ impl Renderer {
         let camera = Camera::new();
         let aspect_ratio = context.size.0 as f32 / context.size.1 as f32;
         
+        // Create default lighting (sun slightly angled from above-left-front)
+        let light = DirectionalLight::default_sun();
+        
         // Create uniform buffer for view-projection matrix
         let view_proj_matrix = camera.view_projection_matrix(aspect_ratio);
         let view_uniform_buffer = Self::create_view_uniform_buffer(&context.device, &view_proj_matrix);
+        
+        // Create uniform buffer for light
+        let light_uniform_buffer = Self::create_light_uniform_buffer(&context.device, &light);
         
         // Create bind group layout
         let bind_group_layout = Self::create_bind_group_layout(&context.device);
         
         // Create bind group
-        let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer);
+        let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer, &light_uniform_buffer);
         
         // Create empty mesh collection
-        let mut meshes = HashMap::new();
-        
-        // Add default triangle mesh
-        let default_mesh = Self::create_default_triangle_mesh();
-        let default_gpu = MeshGPU::from_mesh(&context.device, &default_mesh);
-        meshes.insert("__default__".to_string(), MeshEntry {
-            gpu_mesh: default_gpu,
-            cpu_mesh: default_mesh,
-            visible: true,
-        });
+        let meshes = HashMap::new();
         
         Ok(Self { 
             context,
             view_uniform_buffer,
+            light_uniform_buffer,
             view_bind_group,
             meshes,
             camera,
+            light,
             aspect_ratio,
         })
     }
 
-    /// Create a default triangle mesh (CPU representation)
-    fn create_default_triangle_mesh() -> polylab_core::Mesh {
-        use polylab_core::{Mesh, Vertex};
-        use glam::Vec3;
-        
-        let mut mesh = Mesh::new();
-        
-        // Triangle vertices
-        mesh.vertices.push(Vertex {
-            position: Vec3::new(0.0, 0.5, 0.0),
-            normal: None,
-            tex_coords: None,
-            color: None,
-        });
-        mesh.vertices.push(Vertex {
-            position: Vec3::new(-0.5, -0.5, 0.0),
-            normal: None,
-            tex_coords: None,
-            color: None,
-        });
-        mesh.vertices.push(Vertex {
-            position: Vec3::new(0.5, -0.5, 0.0),
-            normal: None,
-            tex_coords: None,
-            color: None,
-        });
-        
-        // Single face
-        mesh.faces.push(polylab_core::Face {
-            vertices: [0, 1, 2],
-        });
-        
-        mesh
-    }
-
-    /// Create bind group layout for view uniforms
+    /// Create bind group layout for view uniforms and lighting
     fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("View Bind Group Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            label: Some("View & Light Bind Group Layout"),
+            entries: &[
+                // Binding 0: View-Projection matrix (vertex shader)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                // Binding 1: Directional light (fragment shader)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
         })
     }
 
@@ -182,20 +162,38 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         })
     }
+    
+    /// Create uniform buffer for directional light
+    fn create_light_uniform_buffer(device: &wgpu::Device, light: &DirectionalLight) -> wgpu::Buffer {
+        use wgpu::util::DeviceExt;
+        
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Light Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[*light]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        })
+    }
 
     /// Create bind group
     fn create_bind_group(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
-        buffer: &wgpu::Buffer,
+        view_buffer: &wgpu::Buffer,
+        light_buffer: &wgpu::Buffer,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("View Bind Group"),
+            label: Some("View & Light Bind Group"),
             layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: view_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: light_buffer.as_entire_binding(),
+                },
+            ],
         })
     }
 
@@ -331,7 +329,14 @@ impl Renderer {
                     },
                     depth_slice: None,
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.context.depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0), // Clear to max depth (far plane)
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
                 multiview_mask: None,

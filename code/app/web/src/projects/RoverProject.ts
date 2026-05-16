@@ -12,10 +12,18 @@ import type { DetailsPanel } from '../components/DetailsPanel';
 import type { MeshPanel } from '../components/MeshPanel';
 import { appLogger } from '../utils/logger';
 
+type ViewMode = 'scene' | 'stereo' | 'depth' | 'full-grid' | 'point-cloud';
+
 export class RoverProject extends BaseProject {
     private statusBar: StatusBar | null = null;
     private detailsPanel: DetailsPanel | null = null;
     private meshPanel: MeshPanel | null = null;
+    
+    // Current view mode
+    private currentViewMode: ViewMode = 'scene';
+    
+    // Store original canvas to restore when switching back to scene mode
+    private originalCanvas: HTMLCanvasElement | null = null;
     
     // Rover state
     private roverPosition = { x: 0, y: 1, z: 5 }; // Start position
@@ -52,13 +60,12 @@ export class RoverProject extends BaseProject {
                 {
                     label: 'View',
                     submenu: [
-                        { label: 'Main 3D Scene', action: () => this.showMainView() },
-                        { label: 'Left Camera', action: () => this.showLeftCamera() },
-                        { label: 'Right Camera', action: () => this.showRightCamera() },
+                        { label: '🎬 Scene Explorer', action: () => this.switchViewMode('scene') },
+                        { label: '👁️ Stereo Vision', action: () => this.switchViewMode('stereo') },
+                        { label: '🔬 Depth Analysis', action: () => this.switchViewMode('depth') },
                         { separator: true },
-                        { label: 'Stereo Pair (Side-by-Side)', action: () => this.showStereoPair() },
-                        { label: 'Depth Map', action: () => this.showDepthMap(), enabled: false },
-                        { label: 'Point Cloud', action: () => this.showPointCloud(), enabled: false }
+                        { label: '🎯 Full Analysis Grid', action: () => this.switchViewMode('full-grid'), enabled: false },
+                        { label: '🎨 Point Cloud Focus', action: () => this.switchViewMode('point-cloud'), enabled: false }
                     ]
                 }
             ],
@@ -108,6 +115,12 @@ export class RoverProject extends BaseProject {
         appLogger.info('Initializing Rover project...');
         this.viewer = viewer;
         
+        // Store original canvas reference
+        const canvasContainer = document.getElementById('canvas-container');
+        if (canvasContainer) {
+            this.originalCanvas = canvasContainer.querySelector('canvas');
+        }
+        
         // Set up visibility toggle callback
         if (this.meshPanel) {
             this.meshPanel.setVisibilityCallback((id: string, visible: boolean) => {
@@ -117,6 +130,9 @@ export class RoverProject extends BaseProject {
         
         // Load initial scene
         await this.loadInitialScene();
+        
+        // Set initial view mode
+        this.switchViewMode('scene');
         
         appLogger.info('Rover project ready - use arrow keys to navigate');
     }
@@ -224,36 +240,211 @@ export class RoverProject extends BaseProject {
     }
 
     /**
-     * View switching methods
+     * Switch to a different view mode
      */
-    private showMainView(): void {
-        appLogger.debug('Switching to main 3D view');
-        // TODO: Show main scene with rover visualization
+    private switchViewMode(mode: ViewMode): void {
+        if (this.currentViewMode === mode) return;
+        
+        appLogger.info(`Switching view mode: ${this.currentViewMode} → ${mode}`);
+        this.currentViewMode = mode;
+        
+        const canvasContainer = document.getElementById('canvas-container');
+        if (!canvasContainer) {
+            appLogger.error('Canvas container not found');
+            return;
+        }
+        
+        // Update layout based on mode
+        switch (mode) {
+            case 'scene':
+                this.setupSceneLayout(canvasContainer);
+                break;
+            case 'stereo':
+                this.setupStereoLayout(canvasContainer);
+                break;
+            case 'depth':
+                this.setupDepthLayout(canvasContainer);
+                break;
+            case 'full-grid':
+                this.setupFullGridLayout(canvasContainer);
+                break;
+            case 'point-cloud':
+                this.setupPointCloudLayout(canvasContainer);
+                break;
+        }
+        
+        // Update status bar
+        const modeNames: Record<ViewMode, string> = {
+            'scene': '🎬 Scene Explorer',
+            'stereo': '👁️ Stereo Vision',
+            'depth': '🔬 Depth Analysis',
+            'full-grid': '🎯 Full Analysis',
+            'point-cloud': '🎨 Point Cloud'
+        };
+        
+        if (this.statusBar) {
+            this.statusBar.updateStats({ 
+                status: `Mode: ${modeNames[mode]}`
+            });
+        }
     }
-
-    private showLeftCamera(): void {
-        appLogger.debug('Switching to left camera view');
-        // TODO: Render from left camera perspective
+    
+    /**
+     * Setup Scene Explorer layout (single canvas, full size)
+     */
+    private setupSceneLayout(container: HTMLElement): void {
+        appLogger.debug('Setting up Scene Explorer layout');
+        
+        // Clear container and restore original canvas
+        container.innerHTML = '';
+        
+        if (this.originalCanvas) {
+            container.appendChild(this.originalCanvas);
+        }
+        
+        // Single canvas, full size
+        container.style.display = 'block';
+        container.style.gridTemplateColumns = '';
+        container.style.gridTemplateRows = '';
+        container.style.gap = '';
+        
+        const mainCanvas = container.querySelector('canvas');
+        if (mainCanvas) {
+            mainCanvas.style.display = 'block';
+            mainCanvas.style.width = '100%';
+            mainCanvas.style.height = '100%';
+        }
     }
-
-    private showRightCamera(): void {
-        appLogger.debug('Switching to right camera view');
-        // TODO: Render from right camera perspective
+    
+    /**
+     * Setup Stereo Vision layout (two canvases side-by-side)
+     */
+    private setupStereoLayout(container: HTMLElement): void {
+        appLogger.debug('Setting up Stereo Vision layout');
+        
+        // TODO: Create two canvases for left/right cameras
+        // For now, show placeholder
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = '1fr 1fr';
+        container.style.gridTemplateRows = '1fr';
+        container.style.gap = '2px';
+        
+        container.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 48px;">📷</div>
+                    <p style="margin-top: 16px;">Left Camera</p>
+                    <p style="font-size: 12px; color: #444;">(Coming soon)</p>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 48px;">📷</div>
+                    <p style="margin-top: 16px;">Right Camera</p>
+                    <p style="font-size: 12px; color: #444;">(Coming soon)</p>
+                </div>
+            </div>
+        `;
     }
-
-    private showStereoPair(): void {
-        appLogger.debug('Switching to stereo pair view (side-by-side)');
-        // TODO: Show left and right camera images side-by-side
+    
+    /**
+     * Setup Depth Analysis layout (stereo pair + depth map + histogram)
+     */
+    private setupDepthLayout(container: HTMLElement): void {
+        appLogger.debug('Setting up Depth Analysis layout');
+        
+        // TODO: Create layout with stereo pair (left), depth map (top right), histogram (bottom right)
+        // For now, show placeholder
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = '2fr 1fr';
+        container.style.gridTemplateRows = '1fr 1fr';
+        container.style.gap = '2px';
+        
+        container.innerHTML = `
+            <div style="grid-row: 1 / 3; display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 48px;">👁️👁️</div>
+                    <p style="margin-top: 16px;">Stereo Pair</p>
+                    <p style="font-size: 12px; color: #444;">(Left + Right)</p>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 48px;">🗺️</div>
+                    <p style="margin-top: 16px;">Depth Map</p>
+                    <p style="font-size: 12px; color: #444;">(Colorized)</p>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 48px;">📊</div>
+                    <p style="margin-top: 16px;">Histogram</p>
+                    <p style="font-size: 12px; color: #444;">(Depth distribution)</p>
+                </div>
+            </div>
+        `;
     }
-
-    private showDepthMap(): void {
-        appLogger.debug('Switching to depth map view');
-        // TODO: Show computed depth map
+    
+    /**
+     * Setup Full Grid layout (2x2 grid)
+     */
+    private setupFullGridLayout(container: HTMLElement): void {
+        appLogger.debug('Setting up Full Grid layout');
+        
+        // TODO: Create 2x2 grid with scene, camera, point cloud, depth map
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = '1fr 1fr';
+        container.style.gridTemplateRows = '1fr 1fr';
+        container.style.gap = '2px';
+        
+        container.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 32px;">🎬</div>
+                    <p style="margin-top: 8px;">Scene 3D</p>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 32px;">📷</div>
+                    <p style="margin-top: 8px;">Camera L</p>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 32px;">🎨</div>
+                    <p style="margin-top: 8px;">Point Cloud</p>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 32px;">🗺️</div>
+                    <p style="margin-top: 8px;">Depth Map</p>
+                </div>
+            </div>
+        `;
     }
-
-    private showPointCloud(): void {
-        appLogger.debug('Switching to point cloud view');
-        // TODO: Show reconstructed 3D point cloud
+    
+    /**
+     * Setup Point Cloud layout (single canvas optimized for points)
+     */
+    private setupPointCloudLayout(container: HTMLElement): void {
+        appLogger.debug('Setting up Point Cloud layout');
+        
+        // TODO: Create optimized point cloud renderer
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = '1fr';
+        container.style.gridTemplateRows = '1fr';
+        
+        container.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
+                <div style="text-align: center;">
+                    <div style="font-size: 64px;">🎨</div>
+                    <p style="margin-top: 16px; font-size: 18px;">Point Cloud Viewer</p>
+                    <p style="font-size: 12px; color: #444; margin-top: 8px;">(Coming soon)</p>
+                </div>
+            </div>
+        `;
     }
 
     /**

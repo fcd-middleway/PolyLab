@@ -1,5 +1,5 @@
 import type { UIComponent } from '../types/ui.types';
-import type { ToolbarAction, DropZoneConfig } from '../core/types';
+import type { ToolbarAction, DropZoneConfig, MenuItem } from '../core/types';
 import { createFileInput, setupDropZone } from '../utils/meshLoader';
 
 /**
@@ -7,13 +7,116 @@ import { createFileInput, setupDropZone } from '../utils/meshLoader';
  */
 export class Toolbar implements UIComponent {
     element: HTMLElement;
+    private menuContainer: HTMLElement | null = null;
     private actionsContainer: HTMLElement | null = null;
     private dropZoneElement: HTMLElement | null = null;
     private fileInput: HTMLInputElement | null = null;
     private currentActions: Map<string, ToolbarAction> = new Map();
+    private activeMenu: HTMLElement | null = null; // Track currently open menu
 
     constructor() {
         this.element = this.createElement();
+        this.attachGlobalListeners();
+    }
+
+    /**
+     * Set toolbar menus dynamically
+     * Called by UIManager when project changes
+     * 
+     * @param menuItems - Array of menu items to display
+     */
+    public setMenuItems(menuItems: MenuItem[]): void {
+        if (!this.menuContainer) {
+            console.warn('[Toolbar] Menu container not found');
+            return;
+        }
+
+        // Clear current menus
+        this.menuContainer.innerHTML = '';
+
+        // Create menu for each top-level item
+        menuItems.forEach(menuItem => {
+            if (!menuItem.submenu) return; // Skip items without submenu
+
+            const menuButton = document.createElement('button');
+            menuButton.className = 'toolbar-menu-btn';
+            menuButton.textContent = menuItem.label || 'Menu';
+
+            // Create dropdown
+            const dropdown = document.createElement('div');
+            dropdown.className = 'toolbar-menu-dropdown';
+            
+            // Add submenu items
+            menuItem.submenu.forEach(subItem => {
+                if (subItem.separator) {
+                    const separator = document.createElement('div');
+                    separator.className = 'menu-separator';
+                    dropdown.appendChild(separator);
+                } else {
+                    const item = document.createElement('button');
+                    item.className = 'menu-item';
+                    item.textContent = subItem.label || '';
+                    item.disabled = subItem.enabled === false;
+                    
+                    if (!item.disabled && subItem.action) {
+                        item.addEventListener('click', () => {
+                            subItem.action!();
+                            this.closeActiveMenu();
+                        });
+                    }
+                    
+                    dropdown.appendChild(item);
+                }
+            });
+
+            // Create menu container
+            const menuWrapper = document.createElement('div');
+            menuWrapper.className = 'toolbar-menu';
+            menuWrapper.appendChild(menuButton);
+            menuWrapper.appendChild(dropdown);
+
+            // Toggle dropdown on button click
+            menuButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleMenu(menuWrapper);
+            });
+
+            this.menuContainer!.appendChild(menuWrapper);
+        });
+    }
+
+    /**
+     * Toggle menu dropdown
+     */
+    private toggleMenu(menuWrapper: HTMLElement): void {
+        const isOpen = menuWrapper.classList.contains('open');
+        
+        // Close any currently open menu
+        this.closeActiveMenu();
+        
+        if (!isOpen) {
+            menuWrapper.classList.add('open');
+            this.activeMenu = menuWrapper;
+        }
+    }
+
+    /**
+     * Close currently active menu
+     */
+    private closeActiveMenu(): void {
+        if (this.activeMenu) {
+            this.activeMenu.classList.remove('open');
+            this.activeMenu = null;
+        }
+    }
+
+    /**
+     * Attach global listeners for closing menus
+     */
+    private attachGlobalListeners(): void {
+        document.addEventListener('click', () => {
+            this.closeActiveMenu();
+        });
     }
 
     /**
@@ -139,11 +242,16 @@ export class Toolbar implements UIComponent {
         toolbar.className = 'toolbar';
 
         toolbar.innerHTML = `
+            <div class="toolbar-menus" id="toolbar-menus">
+                <!-- Dynamic menus will be inserted here -->
+            </div>
+            <div class="toolbar-divider"></div>
             <div class="toolbar-actions" id="toolbar-actions">
                 <!-- Dynamic buttons will be inserted here -->
             </div>
         `;
 
+        this.menuContainer = toolbar.querySelector('#toolbar-menus');
         this.actionsContainer = toolbar.querySelector('#toolbar-actions');
 
         return toolbar;

@@ -39,6 +39,7 @@ function initializeUI() {
     // Build layout
     const mainContent = document.createElement('div');
     mainContent.className = 'main-content';
+    mainContent.id = 'main-content';
     
     mainContent.appendChild(meshPanel.element);
     mainContent.appendChild(viewerCanvas.element);

@@ -85,3 +85,85 @@
     background: rgba(74, 158, 255, 0.1);
     color: var(--accent-color);
 }
+
+/* ========================================
+   Toolbar Menus
+   ======================================== */
+
+.toolbar-menus {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.toolbar-menu {
+    position: relative;
+}
+
+.toolbar-menu-btn {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.toolbar-menu-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+}
+
+.toolbar-menu.open .toolbar-menu-btn {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+}
+
+.toolbar-menu-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 200px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    padding: 4px 0;
+    z-index: 1000;
+    display: none;
+}
+
+.toolbar-menu.open .toolbar-menu-dropdown {
+    display: block;
+}
+
+.menu-item {
+    width: 100%;
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.menu-item:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+}
+
+.menu-item:disabled {
+    color: var(--text-secondary);
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.menu-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 8px;
+}

@@ -15,6 +15,7 @@ export class ViewerCanvas implements UIComponent {
     private createElement(): HTMLElement {
         const container = document.createElement('div');
         container.className = 'viewer-container';
+        container.id = 'canvas-container';
 
         container.innerHTML = `
             <canvas id="webgpu-canvas"></canvas>

@@ -198,3 +198,61 @@
     transform: translateY(1px);
 }
 
+/* ========================================
+   View Mode Toolbar Styles
+   ======================================== */
+
+.view-mode-toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.view-mode-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 80px;
+}
+
+.view-mode-btn:hover:not(.disabled) {
+    background: var(--bg-primary);
+    border-color: var(--accent-color);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+.view-mode-btn.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+    font-weight: 500;
+}
+
+.view-mode-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.view-mode-btn .mode-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.view-mode-btn .mode-label {
+    font-size: 11px;
+    line-height: 1.2;
+    text-align: center;
+}
+

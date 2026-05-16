@@ -34,21 +34,31 @@ export class UIManager {
         
         this.currentConfig = config;
 
+        // Reconfigure menus
+        this.reconfigureMenus(config.menuItems);
+
         // Reconfigure toolbar
         this.reconfigureToolbar(config.toolbarActions);
 
         // Configure drop zone if specified
         this.toolbar.configureDropZone(config.dropZone || null);
 
-        // TODO: Reconfigure menu when Menu component is refactored
         // TODO: Reconfigure panels when PanelContainer is implemented
 
         uiLogger.debug('UI configuration applied', { 
-            toolbarActions: config.toolbarActions.length,
             menuItems: config.menuItems.length,
+            toolbarActions: config.toolbarActions.length,
             panels: config.panels.length,
             dropZoneEnabled: config.dropZone?.enabled || false
         });
+    }
+
+    /**
+     * Reconfigure menus with new items
+     */
+    private reconfigureMenus(menuItems: MenuItem[]): void {
+        uiLogger.debug(`Configuring menus with ${menuItems.length} top-level items`);
+        this.toolbar.setMenuItems(menuItems);
     }
 
     /**

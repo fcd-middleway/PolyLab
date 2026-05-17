@@ -7,9 +7,12 @@ export class Header implements UIComponent {
     element: HTMLElement;
     private projectSelector: HTMLSelectElement | null = null;
     private onProjectChange: ((projectId: string) => void) | null = null;
+    private themeToggleBtn: HTMLButtonElement | null = null;
+    private currentTheme: 'light' | 'dark' = 'dark';
 
     constructor() {
         this.element = this.createElement();
+        this.loadTheme();
         this.attachEventListeners();
     }
 
@@ -41,8 +44,48 @@ export class Header implements UIComponent {
         `;
 
         this.projectSelector = header.querySelector('#project-selector');
+        this.themeToggleBtn = header.querySelector('#theme-toggle');
 
         return header;
+    }
+
+    /**
+     * Load theme from localStorage or use default (dark)
+     */
+    private loadTheme(): void {
+        const savedTheme = localStorage.getItem('polylab-theme') as 'light' | 'dark' | null;
+        this.currentTheme = savedTheme || 'dark';
+        this.applyTheme(this.currentTheme);
+    }
+
+    /**
+     * Apply theme to the document
+     */
+    private applyTheme(theme: 'light' | 'dark'): void {
+        if (theme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+            if (this.themeToggleBtn) {
+                this.themeToggleBtn.querySelector('.icon')!.textContent = '☀️';
+                this.themeToggleBtn.title = 'Switch to dark theme';
+            }
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+            if (this.themeToggleBtn) {
+                this.themeToggleBtn.querySelector('.icon')!.textContent = '🌙';
+                this.themeToggleBtn.title = 'Switch to light theme';
+            }
+        }
+        this.currentTheme = theme;
+    }
+
+    /**
+     * Toggle between light and dark theme
+     */
+    private toggleTheme(): void {
+        const newTheme = this.currentTheme === 'dark' ? 'light' : 'dark';
+        this.applyTheme(newTheme);
+        localStorage.setItem('polylab-theme', newTheme);
+        console.log(`[Header] Theme switched to ${newTheme}`);
     }
 
     /**
@@ -96,7 +139,7 @@ export class Header implements UIComponent {
 
         // Theme toggle
         this.element.querySelector('#theme-toggle')?.addEventListener('click', () => {
-            console.log('[Header] Theme toggle clicked');
+            this.toggleTheme();
         });
 
         // Help button

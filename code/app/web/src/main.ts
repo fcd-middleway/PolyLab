@@ -2,7 +2,7 @@
 import { Header } from './components/Header';
 import { Toolbar } from './components/Toolbar';
 import { MeshPanel } from './components/MeshPanel';
-import { DetailsPanel } from './components/DetailsPanel';
+import { PropertiesPanel } from './components/PropertiesPanel';
 import { StatusBar } from './components/StatusBar';
 import { ViewerCanvas } from './components/ViewerCanvas';
 import { ProjectManager } from './core/ProjectManager';
@@ -34,7 +34,7 @@ function initializeUI() {
     const toolbar = new Toolbar();
     const meshPanel = new MeshPanel();
     const viewerCanvas = new ViewerCanvas();
-    const detailsPanel = new DetailsPanel();
+    const detailsPanel = new PropertiesPanel();
     const statusBar = new StatusBar();
 
     // Build layout

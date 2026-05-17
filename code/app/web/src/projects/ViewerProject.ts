@@ -8,14 +8,14 @@
 import { BaseProject } from '../core/BaseProject';
 import type { ProjectConfig } from '../core/types';
 import type { MeshPanel } from '../components/MeshPanel';
-import type { DetailsPanel } from '../components/DetailsPanel';
+import type { PropertiesPanel } from '../components/PropertiesPanel';
 import type { StatusBar } from '../components/StatusBar';
 import { setupDropZone, type MeshLoadCallback, type ErrorCallback } from '../utils/meshLoader';
 import { meshLogger } from '../utils/logger';
 
 export class ViewerProject extends BaseProject {
     private meshPanel: MeshPanel | null = null;
-    private detailsPanel: DetailsPanel | null = null;
+    private detailsPanel: PropertiesPanel | null = null;
     private statusBar: StatusBar | null = null;
 
     getId(): string {
@@ -124,7 +124,7 @@ export class ViewerProject extends BaseProject {
                 },
                 {
                     id: 'mesh-details',
-                    title: 'Details',
+                    title: 'Properties',
                     position: 'right',
                     component: null // Will be set during init
                 }
@@ -186,11 +186,24 @@ export class ViewerProject extends BaseProject {
         this.statusBar = null;
     }
 
+    onActivate(): void {
+        meshLogger.debug('Viewer project activated');
+        
+        // Clear Settings section (not used in Viewer mode)
+        if (this.detailsPanel) {
+            this.detailsPanel.clearSettings();
+        }
+    }
+
+    onDeactivate(): void {
+        meshLogger.debug('Viewer project deactivated');
+    }
+
     /**
      * Set UI component references
      * Called by main.ts after UI is initialized
      */
-    setUIComponents(meshPanel: MeshPanel, detailsPanel: DetailsPanel, statusBar: StatusBar): void {
+    setUIComponents(meshPanel: MeshPanel, detailsPanel: PropertiesPanel, statusBar: StatusBar): void {
         this.meshPanel = meshPanel;
         this.detailsPanel = detailsPanel;
         this.statusBar = statusBar;

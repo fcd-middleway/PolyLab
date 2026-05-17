@@ -8,16 +8,17 @@
 import { BaseProject } from '../core/BaseProject';
 import type { ProjectConfig } from '../core/types';
 import type { StatusBar } from '../components/StatusBar';
-import type { DetailsPanel } from '../components/DetailsPanel';
+import type { PropertiesPanel } from '../components/PropertiesPanel';
 import type { MeshPanel } from '../components/MeshPanel';
 import { PerlinControlPanel, type TerrainParams } from '../components/PerlinControlPanel';
 import { appLogger, meshLogger } from '../utils/logger';
 
 export class PerlinProject extends BaseProject {
     private statusBar: StatusBar | null = null;
-    private detailsPanel: DetailsPanel | null = null;
+    private detailsPanel: PropertiesPanel | null = null;
     private meshPanel: MeshPanel | null = null;
     private controlPanel: PerlinControlPanel | null = null;
+    private controlPanelContent: HTMLElement | null = null; // Keep reference to injected content
     private currentTerrainId: string | null = null;
     
     // Default terrain parameters
@@ -81,7 +82,7 @@ export class PerlinProject extends BaseProject {
                 },
                 {
                     id: 'terrain-details',
-                    title: 'Details',
+                    title: 'Properties',
                     position: 'right',
                     component: null
                 }
@@ -92,7 +93,7 @@ export class PerlinProject extends BaseProject {
     /**
      * Set UI components (called by main.ts after project creation)
      */
-    setUIComponents(meshPanel: MeshPanel, statusBar: StatusBar, detailsPanel: DetailsPanel): void {
+    setUIComponents(meshPanel: MeshPanel, statusBar: StatusBar, detailsPanel: PropertiesPanel): void {
         this.meshPanel = meshPanel;
         this.statusBar = statusBar;
         this.detailsPanel = detailsPanel;
@@ -105,6 +106,15 @@ export class PerlinProject extends BaseProject {
             this.params = params;
             this.generateTerrain();
         });
+
+        // Store reference to control panel content (will be injected on activation)
+        if (this.controlPanel) {
+            const controlContent = this.controlPanel.element.querySelector('.panel-content');
+            if (controlContent) {
+                this.controlPanelContent = controlContent as HTMLElement;
+                appLogger.debug('Terrain control panel content reference stored');
+            }
+        }
     }
 
     async init(viewer: any): Promise<void> {
@@ -141,6 +151,9 @@ export class PerlinProject extends BaseProject {
             
             this.currentTerrainId = null;
         }
+        
+        // Clear UI references
+        this.controlPanelContent = null;
     }
 
     onActivate(): void {
@@ -153,30 +166,19 @@ export class PerlinProject extends BaseProject {
             });
         }
         
-        // Replace details panel with control panel
-        if (this.detailsPanel && this.controlPanel) {
-            // Hide default details panel
-            this.detailsPanel.element.style.display = 'none';
-            
-            // Insert control panel after details panel
-            const mainContent = document.querySelector('.main-content');
-            if (mainContent && !document.querySelector('.perlin-control-panel')) {
-                mainContent.appendChild(this.controlPanel.element);
-                appLogger.debug('Control panel added to DOM');
-            }
+        // Inject control panel content into Settings section
+        if (this.detailsPanel && this.controlPanelContent) {
+            this.detailsPanel.setSettingsContent(this.controlPanelContent);
+            appLogger.debug('Terrain controls injected into Settings section');
         }
     }
 
     onDeactivate(): void {
         appLogger.debug('Perlin project deactivated');
         
-        // Restore details panel and remove control panel
-        if (this.detailsPanel && this.controlPanel) {
-            this.detailsPanel.element.style.display = '';
-            const controlPanelElement = document.querySelector('.perlin-control-panel');
-            if (controlPanelElement) {
-                controlPanelElement.remove();
-            }
+        // Clear Settings section when deactivating
+        if (this.detailsPanel) {
+            this.detailsPanel.clearSettings();
         }
     }
 

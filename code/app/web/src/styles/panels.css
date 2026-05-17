@@ -350,3 +350,84 @@
     text-align: center;
 }
 
+/* ========================================
+   Panel Sections (Details Panel)
+   ======================================== */
+
+.panel-section {
+    margin-bottom: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.panel-section:last-child {
+    margin-bottom: 0;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    user-select: none;
+}
+
+.section-header:hover {
+    background: var(--bg-secondary);
+}
+
+.section-header h4 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.section-collapse-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.section-collapse-btn:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.section-content {
+    padding: 12px;
+    max-height: 1000px;
+    overflow-y: auto;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+}
+
+/* Collapsed section state */
+.panel-section.collapsed .section-content {
+    max-height: 0;
+    padding: 0 12px;
+    overflow: hidden;
+}
+
+.panel-section.collapsed .section-header {
+    border-bottom: none;
+}
+
+.panel-section.collapsed .section-collapse-btn .collapse-icon {
+    transform: rotate(-90deg);
+}
+

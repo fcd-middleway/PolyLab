@@ -8,7 +8,7 @@
 import { BaseProject } from '../core/BaseProject';
 import type { ProjectConfig } from '../core/types';
 import type { StatusBar } from '../components/StatusBar';
-import type { DetailsPanel } from '../components/DetailsPanel';
+import type { PropertiesPanel } from '../components/PropertiesPanel';
 import type { MeshPanel } from '../components/MeshPanel';
 import { appLogger } from '../utils/logger';
 
@@ -16,7 +16,7 @@ type ViewMode = 'scene' | 'stereo' | 'depth' | 'full-grid' | 'point-cloud';
 
 export class RoverProject extends BaseProject {
     private statusBar: StatusBar | null = null;
-    private detailsPanel: DetailsPanel | null = null;
+    private detailsPanel: PropertiesPanel | null = null;
     private meshPanel: MeshPanel | null = null;
     
     // Current view mode
@@ -117,7 +117,7 @@ export class RoverProject extends BaseProject {
                 },
                 {
                     id: 'rover-details',
-                    title: 'Rover Info',
+                    title: 'Properties',
                     position: 'right',
                     component: null
                 }
@@ -128,7 +128,7 @@ export class RoverProject extends BaseProject {
     /**
      * Set UI components (called by main.ts after project creation)
      */
-    setUIComponents(meshPanel: MeshPanel, statusBar: StatusBar, detailsPanel: DetailsPanel): void {
+    setUIComponents(meshPanel: MeshPanel, statusBar: StatusBar, detailsPanel: PropertiesPanel): void {
         this.meshPanel = meshPanel;
         this.statusBar = statusBar;
         this.detailsPanel = detailsPanel;
@@ -189,10 +189,20 @@ export class RoverProject extends BaseProject {
         if (this.detailsPanel) {
             this.updateRoverInfo();
         }
+        
+        // Clear Settings section (not used in Rover mode)
+        if (this.detailsPanel) {
+            this.detailsPanel.clearSettings();
+        }
     }
 
     onDeactivate(): void {
         appLogger.debug('Rover project deactivated');
+        
+        // Clear Settings section when deactivating
+        if (this.detailsPanel) {
+            this.detailsPanel.clearSettings();
+        }
     }
 
     /**

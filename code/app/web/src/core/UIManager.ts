@@ -8,13 +8,13 @@
 import type { ProjectConfig, MenuItem, ToolbarAction } from './types';
 import type { Toolbar } from '../components/Toolbar';
 import type { MeshPanel } from '../components/MeshPanel';
-import type { DetailsPanel } from '../components/DetailsPanel';
+import type { PropertiesPanel } from '../components/PropertiesPanel';
 import { uiLogger } from '../utils/logger';
 
 export class UIManager {
     private toolbar: Toolbar;
     private meshPanel: MeshPanel | null = null;
-    private detailsPanel: DetailsPanel | null = null;
+    private detailsPanel: PropertiesPanel | null = null;
     private currentConfig: ProjectConfig | null = null;
 
     /**
@@ -22,9 +22,9 @@ export class UIManager {
      * 
      * @param toolbar - The toolbar component instance
      * @param meshPanel - The mesh/scene panel instance (optional)
-     * @param detailsPanel - The details panel instance (optional)
+     * @param detailsPanel - The properties panel instance (optional)
      */
-    constructor(toolbar: Toolbar, meshPanel?: MeshPanel, detailsPanel?: DetailsPanel) {
+    constructor(toolbar: Toolbar, meshPanel?: MeshPanel, detailsPanel?: PropertiesPanel) {
         this.toolbar = toolbar;
         this.meshPanel = meshPanel || null;
         this.detailsPanel = detailsPanel || null;

@@ -153,8 +153,8 @@ async function main() {
         const projectManager = new ProjectManager();
         projectManager.setViewer(viewer);
 
-        // Create UIManager
-        const uiManager = new UIManager(ui.toolbar);
+        // Create UIManager with panel references
+        const uiManager = new UIManager(ui.toolbar, ui.meshPanel, ui.detailsPanel);
 
         // Create ViewerProject
         const viewerProject = new ViewerProject();

@@ -118,7 +118,7 @@ export class ViewerProject extends BaseProject {
             panels: [
                 {
                     id: 'mesh-list',
-                    title: 'Meshes',
+                    title: 'Scenes',
                     position: 'left',
                     component: null // Will be set during init
                 },

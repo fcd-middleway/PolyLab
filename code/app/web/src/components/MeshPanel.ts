@@ -1,17 +1,29 @@
 import type { UIComponent, MeshInfo } from '../types/ui.types';
 
 /**
- * Mesh Panel component - Left sidebar showing loaded meshes
+ * Scene Panel component - Left sidebar showing loaded scenes
  */
 export class MeshPanel implements UIComponent {
     element: HTMLElement;
     private meshes: MeshInfo[] = [];
     private visibilityCallback: ((id: string, visible: boolean) => void) | null = null;
     private isCollapsed: boolean = false;
+    private title: string = 'Scenes';
 
     constructor() {
         this.element = this.createElement();
         this.attachEventListeners();
+    }
+
+    /**
+     * Set panel title dynamically
+     */
+    setTitle(title: string): void {
+        this.title = title;
+        const titleElement = this.element.querySelector('.panel-header h3');
+        if (titleElement) {
+            titleElement.textContent = title;
+        }
     }
 
     private createElement(): HTMLElement {
@@ -20,20 +32,15 @@ export class MeshPanel implements UIComponent {
 
         panel.innerHTML = `
             <div class="panel-header">
-                <h3>Meshes</h3>
+                <h3>${this.title}</h3>
                 <button class="panel-collapse-btn" title="Toggle panel">
                     <span class="collapse-icon">▶</span>
                 </button>
             </div>
             <div class="panel-content" id="mesh-list">
                 <div class="empty-state">
-                    No meshes loaded
+                    No scenes loaded
                 </div>
-            </div>
-            <div class="panel-footer">
-                <button class="panel-btn" id="add-mesh-btn">
-                    <span class="icon">+</span> Add Mesh
-                </button>
             </div>
         `;
 
@@ -41,10 +48,6 @@ export class MeshPanel implements UIComponent {
     }
 
     private attachEventListeners(): void {
-        this.element.querySelector('#add-mesh-btn')?.addEventListener('click', () => {
-            console.log('[MeshPanel] Add mesh button clicked');
-        });
-        
         const collapseBtn = this.element.querySelector('.panel-collapse-btn');
         collapseBtn?.addEventListener('click', () => this.toggle());
     }
@@ -128,7 +131,7 @@ export class MeshPanel implements UIComponent {
         if (!meshList) return;
 
         if (this.meshes.length === 0) {
-            meshList.innerHTML = '<div class="empty-state">No meshes loaded</div>';
+            meshList.innerHTML = '<div class="empty-state">No scenes loaded</div>';
             return;
         }
 

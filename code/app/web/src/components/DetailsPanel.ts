@@ -11,10 +11,22 @@ export class DetailsPanel implements UIComponent {
     private sizeY: number = 0;
     private sizeZ: number = 0;
     private isCollapsed: boolean = false;
+    private title: string = 'Details';
 
     constructor() {
         this.element = this.createElement();
         this.attachEventListeners();
+    }
+
+    /**
+     * Set panel title dynamically
+     */
+    setTitle(title: string): void {
+        this.title = title;
+        const titleElement = this.element.querySelector('.panel-header h3');
+        if (titleElement) {
+            titleElement.textContent = title;
+        }
     }
 
     private createElement(): HTMLElement {
@@ -23,7 +35,7 @@ export class DetailsPanel implements UIComponent {
 
         panel.innerHTML = `
             <div class="panel-header">
-                <h3>Details</h3>
+                <h3>${this.title}</h3>
                 <button class="panel-collapse-btn" title="Toggle panel">
                     <span class="collapse-icon">◀</span>
                 </button>

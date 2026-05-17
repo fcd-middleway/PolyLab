@@ -111,7 +111,7 @@ export class RoverProject extends BaseProject {
             panels: [
                 {
                     id: 'mesh-list',
-                    title: 'Meshes',
+                    title: 'Scenes',
                     position: 'left',
                     component: null
                 },

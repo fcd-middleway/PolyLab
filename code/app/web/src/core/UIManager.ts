@@ -7,19 +7,27 @@
 
 import type { ProjectConfig, MenuItem, ToolbarAction } from './types';
 import type { Toolbar } from '../components/Toolbar';
+import type { MeshPanel } from '../components/MeshPanel';
+import type { DetailsPanel } from '../components/DetailsPanel';
 import { uiLogger } from '../utils/logger';
 
 export class UIManager {
     private toolbar: Toolbar;
+    private meshPanel: MeshPanel | null = null;
+    private detailsPanel: DetailsPanel | null = null;
     private currentConfig: ProjectConfig | null = null;
 
     /**
      * Create a new UIManager
      * 
      * @param toolbar - The toolbar component instance
+     * @param meshPanel - The mesh/scene panel instance (optional)
+     * @param detailsPanel - The details panel instance (optional)
      */
-    constructor(toolbar: Toolbar) {
+    constructor(toolbar: Toolbar, meshPanel?: MeshPanel, detailsPanel?: DetailsPanel) {
         this.toolbar = toolbar;
+        this.meshPanel = meshPanel || null;
+        this.detailsPanel = detailsPanel || null;
         uiLogger.info('UIManager initialized');
     }
 
@@ -51,7 +59,8 @@ export class UIManager {
         // Configure drop zone if specified
         this.toolbar.configureDropZone(config.dropZone || null);
 
-        // TODO: Reconfigure panels when PanelContainer is implemented
+        // Configure panels with titles from config
+        this.configurePanels(config.panels);
 
         uiLogger.debug('UI configuration applied', { 
             toolbarActions: config.toolbarActions.length,
@@ -82,6 +91,24 @@ export class UIManager {
      */
     getCurrentConfig(): ProjectConfig | null {
         return this.currentConfig;
+    }
+
+    /**
+     * Configure panels with titles from project config
+     */
+    private configurePanels(panelDefinitions: any[]): void {
+        panelDefinitions.forEach(panelDef => {
+            if (panelDef.id === 'mesh-list' && this.meshPanel) {
+                this.meshPanel.setTitle(panelDef.title);
+                uiLogger.debug(`Set mesh panel title to: ${panelDef.title}`);
+            } else if (panelDef.id === 'mesh-details' && this.detailsPanel) {
+                this.detailsPanel.setTitle(panelDef.title);
+                uiLogger.debug(`Set details panel title to: ${panelDef.title}`);
+            } else if ((panelDef.id === 'rover-details' || panelDef.id === 'terrain-details') && this.detailsPanel) {
+                this.detailsPanel.setTitle(panelDef.title);
+                uiLogger.debug(`Set details panel title to: ${panelDef.title}`);
+            }
+        });
     }
 
     /**

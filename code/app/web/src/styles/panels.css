@@ -5,11 +5,74 @@
 .mesh-panel {
     width: 220px;
     border-right: 1px solid var(--border-color);
+    transition: width 0.3s ease;
+    overflow: hidden;
 }
 
 .details-panel {
     width: 220px;
     border-left: 1px solid var(--border-color);
+    transition: width 0.3s ease;
+    overflow: hidden;
+}
+
+/* Collapsed state */
+.panel.collapsed {
+    width: 40px;
+}
+
+.panel.collapsed .panel-header {
+    padding: 8px 0;
+    justify-content: center;
+}
+
+.panel.collapsed .panel-content,
+.panel.collapsed .panel-footer {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.panel.collapsed h3 {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+}
+
+.panel.collapsed .panel-collapse-btn {
+    padding: 6px;
+}
+
+/* Collapse button */
+.panel-collapse-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.panel-collapse-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.collapse-icon {
+    transition: transform 0.3s ease;
+}
+
+/* Rotate icon when collapsed */
+.mesh-panel.collapsed .collapse-icon {
+    transform: rotate(180deg);
+}
+
+.details-panel.collapsed .collapse-icon {
+    transform: rotate(180deg);
 }
 
 /* Mesh list item */
@@ -69,6 +132,37 @@
 .perlin-control-panel {
     width: 280px;
     border-left: 1px solid var(--border-color);
+    transition: width 0.3s ease;
+    overflow: hidden;
+}
+
+/* Collapsed state for Perlin panel */
+.perlin-control-panel.collapsed {
+    width: 40px;
+}
+
+.perlin-control-panel.collapsed .panel-header {
+    padding: 8px 0;
+    justify-content: center;
+}
+
+.perlin-control-panel.collapsed .panel-content {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.perlin-control-panel.collapsed h3 {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+}
+
+.perlin-control-panel.collapsed .panel-collapse-btn {
+    padding: 6px;
+}
+
+.perlin-control-panel.collapsed .collapse-icon {
+    transform: rotate(180deg);
 }
 
 .control-group {

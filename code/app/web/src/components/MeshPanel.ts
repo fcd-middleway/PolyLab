@@ -7,6 +7,7 @@ export class MeshPanel implements UIComponent {
     element: HTMLElement;
     private meshes: MeshInfo[] = [];
     private visibilityCallback: ((id: string, visible: boolean) => void) | null = null;
+    private isCollapsed: boolean = false;
 
     constructor() {
         this.element = this.createElement();
@@ -20,6 +21,9 @@ export class MeshPanel implements UIComponent {
         panel.innerHTML = `
             <div class="panel-header">
                 <h3>Meshes</h3>
+                <button class="panel-collapse-btn" title="Toggle panel">
+                    <span class="collapse-icon">▶</span>
+                </button>
             </div>
             <div class="panel-content" id="mesh-list">
                 <div class="empty-state">
@@ -40,6 +44,29 @@ export class MeshPanel implements UIComponent {
         this.element.querySelector('#add-mesh-btn')?.addEventListener('click', () => {
             console.log('[MeshPanel] Add mesh button clicked');
         });
+        
+        const collapseBtn = this.element.querySelector('.panel-collapse-btn');
+        collapseBtn?.addEventListener('click', () => this.toggle());
+    }
+
+    /**
+     * Toggle panel collapsed state
+     */
+    toggle(): void {
+        this.isCollapsed = !this.isCollapsed;
+        
+        if (this.isCollapsed) {
+            this.element.classList.add('collapsed');
+        } else {
+            this.element.classList.remove('collapsed');
+        }
+    }
+
+    /**
+     * Check if panel is collapsed
+     */
+    isCollapsedState(): boolean {
+        return this.isCollapsed;
     }
 
     /**

@@ -10,9 +10,11 @@ export class DetailsPanel implements UIComponent {
     private sizeX: number = 0;
     private sizeY: number = 0;
     private sizeZ: number = 0;
+    private isCollapsed: boolean = false;
 
     constructor() {
         this.element = this.createElement();
+        this.attachEventListeners();
     }
 
     private createElement(): HTMLElement {
@@ -22,6 +24,9 @@ export class DetailsPanel implements UIComponent {
         panel.innerHTML = `
             <div class="panel-header">
                 <h3>Details</h3>
+                <button class="panel-collapse-btn" title="Toggle panel">
+                    <span class="collapse-icon">◀</span>
+                </button>
             </div>
             <div class="panel-content">
                 <div class="detail-row">
@@ -83,6 +88,31 @@ export class DetailsPanel implements UIComponent {
     private updateElement(selector: string, value: string): void {
         const el = this.element.querySelector(selector);
         if (el) el.textContent = value;
+    }
+
+    private attachEventListeners(): void {
+        const collapseBtn = this.element.querySelector('.panel-collapse-btn');
+        collapseBtn?.addEventListener('click', () => this.toggle());
+    }
+
+    /**
+     * Toggle panel collapsed state
+     */
+    toggle(): void {
+        this.isCollapsed = !this.isCollapsed;
+        
+        if (this.isCollapsed) {
+            this.element.classList.add('collapsed');
+        } else {
+            this.element.classList.remove('collapsed');
+        }
+    }
+
+    /**
+     * Check if panel is collapsed
+     */
+    isCollapsedState(): boolean {
+        return this.isCollapsed;
     }
 
     destroy(): void {

@@ -10,6 +10,7 @@ use crate::mesh_gpu::MeshGPU;
 use crate::camera::Camera;
 use crate::light::DirectionalLight;
 use std::collections::HashMap;
+use glam::{Vec3, Mat4};
 
 // Desktop-specific imports
 #[cfg(not(target_arch = "wasm32"))]
@@ -115,6 +116,11 @@ impl Renderer {
             camera,
             light,
             aspect_ratio,
+            stereo_baseline: 0.3, // 30cm baseline for rover stereo cameras
+            rover_position: Vec3::new(0.0, 0.0, 0.0), // Rover at origin initially
+            rover_yaw: 0.0,
+            rover_pitch: 0.0,
+            rover_eye_height: 0.8, // Wall-E's eyes are ~80cm above ground
         })
     }
 
@@ -412,6 +418,26 @@ impl Renderer {
         (pos.x, pos.y, pos.z)
     }
     
+    /// Get camera yaw (rotation around Y axis) in radians
+    pub fn camera_get_yaw(&self) -> f32 {
+        self.camera.yaw()
+    }
+    
+    /// Get camera pitch (rotation around X axis) in radians
+    pub fn camera_get_pitch(&self) -> f32 {
+        self.camera.pitch()
+    }
+    
+    /// Set camera yaw (rotation around Y axis) in radians
+    pub fn camera_set_yaw(&mut self, yaw: f32) {
+        self.camera.set_yaw(yaw);
+    }
+    
+    /// Set camera pitch (rotation around X axis) in radians
+    pub fn camera_set_pitch(&mut self, pitch: f32) {
+        self.camera.set_pitch(pitch);
+    }
+    
     /// Set orbital rotation target
     pub fn camera_set_orbit_target(&mut self, x: f32, y: f32, z: f32) {
         self.camera.set_orbit_target(glam::Vec3::new(x, y, z));
@@ -427,4 +453,139 @@ impl Renderer {
     pub fn camera_orbit_around(&mut self, delta_yaw: f32, delta_pitch: f32) {
         self.camera.orbit_around(delta_yaw, delta_pitch);
     }
+    
+    /// Render a frame with a custom view-projection matrix
+    ///
+    /// Similar to render() but uses the provided view-projection matrix
+    /// instead of computing it from the main camera.
+    /// This allows rendering multiple views (e.g., stereo) with different camera parameters.
+    pub fn render_with_view_projection(&mut self, pipeline: &wgpu::RenderPipeline, view_proj_matrix: Mat4) -> Result<(), String> {
+        // Update view-projection matrix uniform with custom matrix
+        let matrix_data: &[f32; 16] = view_proj_matrix.as_ref();
+        self.context.queue.write_buffer(
+            &self.view_uniform_buffer,
+            0,
+            bytemuck::cast_slice(matrix_data),
+        );
+        
+        // Acquire next frame from swapchain
+        let output = match self.context.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                return Ok(()); // Skip frame if surface unavailable
+            }
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                return Err("Surface lost - call resize()".to_string());
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                return Err("Surface validation error".to_string());
+            }
+        };
+
+        // Create texture view for rendering
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Create command encoder - records GPU commands
+        let mut encoder = self
+            .context
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        // Record render pass (clear + draw)
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Stereo Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(constants::CLEAR_COLOR),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.context.depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0), // Clear to max depth (far plane)
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_bind_group(0, &self.view_bind_group, &[]);
+            
+            // Draw all visible meshes
+            for entry in self.meshes.values().filter(|e| e.visible) {
+                render_pass.set_vertex_buffer(0, entry.gpu_mesh.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(entry.gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..entry.gpu_mesh.index_count, 0, 0..1);
+            }
+        }
+
+        // Submit commands to GPU
+        self.context.queue.submit(std::iter::once(encoder.finish()));
+        
+        // Present frame to screen
+        output.present();
+
+        Ok(())
+    }
+}
+
+// ========================
+// Utility Functions
+// ========================
+
+/// Create a view-projection matrix from camera parameters
+///
+/// This is a standalone utility function that can be used to calculate
+/// view-projection matrices without creating a Camera object.
+/// Useful for external systems (e.g., rover, NPCs) that need camera matrices.
+///
+/// # Parameters
+/// * `eye_position` - Camera position in world space
+/// * `yaw` - Horizontal rotation in radians (Y-axis). 0 = looking towards -Z
+/// * `pitch` - Vertical rotation in radians (X-axis). Positive = looking up
+/// * `aspect_ratio` - Width / height ratio of the viewport
+///
+/// # Returns
+/// A 4x4 view-projection matrix combining view and perspective transforms
+///
+/// # Example
+/// ```
+/// use glam::Vec3;
+/// use polylab_viewer::create_view_projection_matrix;
+///
+/// let eye_pos = Vec3::new(0.0, 1.0, -5.0);
+/// let yaw = 0.0;  // Looking towards -Z
+/// let pitch = 0.0; // Level (no tilt)
+/// let aspect = 16.0 / 9.0;
+///
+/// let matrix = create_view_projection_matrix(eye_pos, yaw, pitch, aspect);
+/// ```
+pub fn create_view_projection_matrix(
+    eye_position: Vec3,
+    yaw: f32,
+    pitch: f32,
+    aspect_ratio: f32,
+) -> Mat4 {
+    // Create a temporary camera with the given parameters
+    let mut camera = Camera::new();
+    camera.set_position(eye_position);
+    camera.set_yaw(yaw);
+    camera.set_pitch(pitch);
+    
+    // Return the view-projection matrix
+    camera.view_projection_matrix(aspect_ratio)
 }

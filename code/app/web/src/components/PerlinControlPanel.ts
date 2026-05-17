@@ -22,6 +22,7 @@ export class PerlinControlPanel implements UIComponent {
     element: HTMLElement;
     private params: TerrainParams;
     private onGenerate: ((params: TerrainParams) => void) | null = null;
+    private isCollapsed: boolean = false;
 
     constructor(initialParams: TerrainParams) {
         this.params = { ...initialParams };
@@ -37,6 +38,9 @@ export class PerlinControlPanel implements UIComponent {
         panel.innerHTML = `
             <div class="panel-header">
                 <h3>🏔️ Terrain Controls</h3>
+                <button class="panel-collapse-btn" title="Toggle panel">
+                    <span class="collapse-icon">◀</span>
+                </button>
             </div>
             <div class="panel-content">
                 <!-- Seed -->
@@ -182,6 +186,30 @@ export class PerlinControlPanel implements UIComponent {
                 this.onGenerate(this.params);
             }
         });
+        
+        // Collapse button
+        const collapseBtn = this.element.querySelector('.panel-collapse-btn');
+        collapseBtn?.addEventListener('click', () => this.toggle());
+    }
+
+    /**
+     * Toggle panel collapsed state
+     */
+    toggle(): void {
+        this.isCollapsed = !this.isCollapsed;
+        
+        if (this.isCollapsed) {
+            this.element.classList.add('collapsed');
+        } else {
+            this.element.classList.remove('collapsed');
+        }
+    }
+
+    /**
+     * Check if panel is collapsed
+     */
+    isCollapsedState(): boolean {
+        return this.isCollapsed;
     }
 
     private updateSliderValue(selector: string, value: string): void {

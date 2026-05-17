@@ -67,6 +67,26 @@ impl Camera {
         self.position = position;
     }
     
+    /// Get yaw angle in radians
+    pub fn yaw(&self) -> f32 {
+        self.yaw
+    }
+    
+    /// Get pitch angle in radians
+    pub fn pitch(&self) -> f32 {
+        self.pitch
+    }
+    
+    /// Set yaw angle in radians
+    pub fn set_yaw(&mut self, yaw: f32) {
+        self.yaw = yaw;
+    }
+    
+    /// Set pitch angle in radians
+    pub fn set_pitch(&mut self, pitch: f32) {
+        self.pitch = pitch;
+    }
+    
     /// Get forward direction vector
     pub fn forward(&self) -> Vec3 {
         Vec3::new(

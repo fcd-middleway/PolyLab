@@ -18,6 +18,9 @@ pub use mesh_gpu::{MeshGPU, GpuVertex};
 pub use camera::Camera;
 pub use light::DirectionalLight;
 
+// Utility function (re-exported for external crates like polylab-rover)
+pub use renderer::create_view_projection_matrix;
+
 // WASM-specific code
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -462,6 +465,30 @@ impl ViewerHandle {
         vec![x, y, z]
     }
     
+    /// Get camera yaw (rotation around Y axis) in radians
+    #[wasm_bindgen]
+    pub fn camera_get_yaw(&self) -> f32 {
+        self.renderer.camera_get_yaw()
+    }
+    
+    /// Get camera pitch (rotation around X axis) in radians
+    #[wasm_bindgen]
+    pub fn camera_get_pitch(&self) -> f32 {
+        self.renderer.camera_get_pitch()
+    }
+    
+    /// Set camera yaw (rotation around Y axis) in radians
+    #[wasm_bindgen]
+    pub fn camera_set_yaw(&mut self, yaw: f32) {
+        self.renderer.camera_set_yaw(yaw);
+    }
+    
+    /// Set camera pitch (rotation around X axis) in radians
+    #[wasm_bindgen]
+    pub fn camera_set_pitch(&mut self, pitch: f32) {
+        self.renderer.camera_set_pitch(pitch);
+    }
+    
     /// Set orbital rotation target point
     ///
     /// Sets the point around which the camera orbits when using mouse drag.
@@ -492,6 +519,88 @@ impl ViewerHandle {
     pub fn camera_orbit_around(&mut self, delta_yaw: f32, delta_pitch: f32) {
         self.renderer.camera_orbit_around(delta_yaw, delta_pitch);
     }
+    
+    // ========================
+    // Custom View-Projection Matrix Rendering
+    // ========================
+    
+    /// Render a frame with a custom view-projection matrix
+    ///
+    /// This allows rendering with camera parameters different from the main camera.
+    /// Useful for multi-view rendering, stereo, portals, etc.
+    ///
+    /// # Parameters
+    /// * `matrix_data` - 16 float values representing the view-projection matrix in column-major order
+    ///
+    /// # Example
+    /// ```javascript
+    /// // Create a custom camera matrix (from external source)
+    /// const customMatrix = calculateCustomViewProjection();
+    /// viewer.render_with_matrix(customMatrix);
+    /// ```
+    #[wasm_bindgen]
+    pub fn render_with_matrix(&mut self, matrix_data: Vec<f32>) -> Result<(), JsValue> {
+        if matrix_data.len() != 16 {
+            return Err(JsValue::from_str(&format!(
+                "Matrix must have 16 elements, got {}",
+                matrix_data.len()
+            )));
+        }
+        
+        // Convert Vec<f32> to [f32; 16]
+        let mut array = [0.0f32; 16];
+        array.copy_from_slice(&matrix_data);
+        
+        // Create glam Mat4 from array
+        let matrix = glam::Mat4::from_cols_array(&array);
+        
+        self.renderer
+            .render_with_view_projection(&self.pipeline, matrix)
+            .map_err(|e| JsValue::from_str(&e))
+    }
+}
+
+// ========================
+// Standalone Utility Functions (WASM)
+// ========================
+
+/// Create a view-projection matrix from camera parameters (utility function)
+///
+/// This is a standalone function that can be used to calculate view-projection
+/// matrices without a ViewerHandle. Useful for external systems (rovers, NPCs, etc.)
+///
+/// # Parameters
+/// * `eye_x`, `eye_y`, `eye_z` - Camera position in world space
+/// * `yaw` - Horizontal rotation in radians (Y-axis). 0 = looking towards -Z
+/// * `pitch` - Vertical rotation in radians (X-axis). Positive = looking up
+/// * `aspect_ratio` - Width / height ratio of the viewport
+///
+/// # Returns
+/// 16-element array representing the 4x4 matrix in column-major order
+///
+/// # Example
+/// ```javascript
+/// const matrix = create_view_proj_matrix(
+///     0, 1, -5,    // eye position
+///     0, 0,        // yaw, pitch
+///     16/9         // aspect ratio
+/// );
+/// viewer.render_with_matrix(matrix);
+/// ```
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(js_name = createViewProjectionMatrix)]
+pub fn create_view_proj_matrix_wasm(
+    eye_x: f32,
+    eye_y: f32,
+    eye_z: f32,
+    yaw: f32,
+    pitch: f32,
+    aspect_ratio: f32,
+) -> Vec<f32> {
+    let eye_position = glam::Vec3::new(eye_x, eye_y, eye_z);
+    let matrix = crate::create_view_projection_matrix(eye_position, yaw, pitch, aspect_ratio);
+    let data: &[f32; 16] = matrix.as_ref();
+    data.to_vec()
 }
 
 // Initialize wasm-bindgen

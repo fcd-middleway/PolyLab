@@ -25,9 +25,14 @@ export class RoverProject extends BaseProject {
     // Store original canvas to restore when switching back to scene mode
     private originalCanvas: HTMLCanvasElement | null = null;
     
-    // Rover state
-    private roverPosition = { x: 0, y: 1, z: 5 }; // Start position
-    private roverRotation = { yaw: 0, pitch: 0 }; // Orientation
+    // Stereo viewers for dual-camera mode
+    private leftViewer: any | null = null;
+    private rightViewer: any | null = null;
+    private stereoCanvasLeft: HTMLCanvasElement | null = null;
+    private stereoCanvasRight: HTMLCanvasElement | null = null;
+    
+    // Rover handle (WASM)
+    private rover: any | null = null; // RoverHandle from polylab-rover
     
     // Camera parameters
     private readonly cameraBaseline = 0.3; // Distance between left/right cameras (meters)
@@ -146,6 +151,9 @@ export class RoverProject extends BaseProject {
     cleanup(): void {
         appLogger.info('Cleaning up Rover project...');
         
+        // Cleanup stereo viewers
+        this.cleanupStereoViewers();
+        
         // TODO: Remove rover meshes, camera visualizations, etc.
     }
 
@@ -175,10 +183,11 @@ export class RoverProject extends BaseProject {
     private resetRover(): void {
         appLogger.info('Resetting rover position...');
         
-        this.roverPosition = { x: 0, y: 1, z: 5 };
-        this.roverRotation = { yaw: 0, pitch: 0 };
-        
-        // TODO: Update camera to follow rover
+        if (this.rover) {
+            // Reset WASM rover to initial stereo position
+            this.rover.set_position(0, 0, -10);
+            this.rover.set_orientation(-Math.PI / 2, 0); // Facing +Z
+        }
         
         this.updateRoverInfo();
         
@@ -191,9 +200,17 @@ export class RoverProject extends BaseProject {
      * Capture stereo pair from current rover position
      */
     private captureStereo(): void {
+        if (!this.rover) {
+            appLogger.warn('Cannot capture stereo: rover not initialized');
+            return;
+        }
+        
+        const pos = this.rover.get_position();
+        const orient = this.rover.get_orientation();
+        
         appLogger.info('Capturing stereo pair...', {
-            position: this.roverPosition,
-            rotation: this.roverRotation
+            position: { x: pos[0], y: pos[1], z: pos[2] },
+            orientation: { yaw: orient[0], pitch: orient[1] }
         });
         
         if (this.statusBar) {
@@ -242,10 +259,16 @@ export class RoverProject extends BaseProject {
     /**
      * Switch to a different view mode
      */
-    private switchViewMode(mode: ViewMode): void {
+    private async switchViewMode(mode: ViewMode): Promise<void> {
         if (this.currentViewMode === mode) return;
         
         appLogger.info(`Switching view mode: ${this.currentViewMode} → ${mode}`);
+        
+        // Cleanup previous mode
+        if (this.currentViewMode === 'stereo') {
+            await this.cleanupStereoViewers();
+        }
+        
         this.currentViewMode = mode;
         
         const canvasContainer = document.getElementById('canvas-container');
@@ -260,7 +283,7 @@ export class RoverProject extends BaseProject {
                 this.setupSceneLayout(canvasContainer);
                 break;
             case 'stereo':
-                this.setupStereoLayout(canvasContainer);
+                await this.setupStereoLayout(canvasContainer);
                 break;
             case 'depth':
                 this.setupDepthLayout(canvasContainer);
@@ -319,33 +342,166 @@ export class RoverProject extends BaseProject {
     /**
      * Setup Stereo Vision layout (two canvases side-by-side)
      */
-    private setupStereoLayout(container: HTMLElement): void {
+    private async setupStereoLayout(container: HTMLElement): Promise<void> {
         appLogger.debug('Setting up Stereo Vision layout');
         
-        // TODO: Create two canvases for left/right cameras
-        // For now, show placeholder
+        // Clear existing content
+        container.innerHTML = '';
+        
+        // Clean up existing stereo viewers
+        await this.cleanupStereoViewers();
+        
+        // Create grid layout for two canvases
         container.style.display = 'grid';
         container.style.gridTemplateColumns = '1fr 1fr';
         container.style.gridTemplateRows = '1fr';
         container.style.gap = '2px';
         
-        container.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 48px;">📷</div>
-                    <p style="margin-top: 16px;">Left Camera</p>
-                    <p style="font-size: 12px; color: #444;">(Coming soon)</p>
+        // Create left canvas
+        const leftCanvas = document.createElement('canvas');
+        leftCanvas.id = 'stereo-canvas-left';
+        leftCanvas.style.width = '100%';
+        leftCanvas.style.height = '100%';
+        leftCanvas.style.display = 'block';
+        
+        // Create right canvas
+        const rightCanvas = document.createElement('canvas');
+        rightCanvas.id = 'stereo-canvas-right';
+        rightCanvas.style.width = '100%';
+        rightCanvas.style.height = '100%';
+        rightCanvas.style.display = 'block';
+        
+        // Add to container
+        container.appendChild(leftCanvas);
+        container.appendChild(rightCanvas);
+        
+        // Store canvas references
+        this.stereoCanvasLeft = leftCanvas;
+        this.stereoCanvasRight = rightCanvas;
+        
+        // Initialize stereo viewers
+        try {
+            await this.initStereoViewers();
+            appLogger.info('Stereo viewers initialized successfully');
+        } catch (error) {
+            appLogger.error('Failed to initialize stereo viewers:', error);
+            
+            // Show error message
+            container.innerHTML = `
+                <div style="grid-column: 1 / 3; display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #ff6b6b;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 48px;">⚠️</div>
+                        <p style="margin-top: 16px;">Failed to initialize stereo cameras</p>
+                        <p style="font-size: 12px; color: #999; margin-top: 8px;">Check console for details</p>
+                    </div>
                 </div>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 48px;">📷</div>
-                    <p style="margin-top: 16px;">Right Camera</p>
-                    <p style="font-size: 12px; color: #444;">(Coming soon)</p>
-                </div>
-            </div>
-        `;
+            `;
+        }
     }
+    
+    /**
+     * Initialize left and right viewers for stereo mode
+     */
+    private async initStereoViewers(): Promise<void> {
+        // Import WASM modules
+        const viewerModule = await import('../../public/wasm/viewer/polylab_viewer.js');
+        await viewerModule.default();
+        
+        const roverModule = await import('../../public/wasm/rover/polylab_rover.js');
+        await roverModule.default();
+        
+        // Create rover at Wall-E position (0, 0, -10) facing +Z
+        appLogger.debug('Creating rover...');
+        this.rover = roverModule.RoverHandle.at_position(0, 0, -10);
+        this.rover.set_orientation(-Math.PI / 2, 0); // -90° yaw (facing +Z), 0° pitch
+        this.rover.set_stereo_baseline(this.cameraBaseline);
+        this.rover.set_eye_height(0.8); // Wall-E's eyes
+        
+        appLogger.debug(`Rover created at position (0, 0, -10) with yaw=${(-Math.PI/2).toFixed(2)} rad`);
+        
+        // Create left viewer
+        appLogger.debug('Creating left viewer...');
+        this.leftViewer = await viewerModule.ViewerHandle.create('stereo-canvas-left');
+        
+        // Create right viewer
+        appLogger.debug('Creating right viewer...');
+        this.rightViewer = await viewerModule.ViewerHandle.create('stereo-canvas-right');
+        
+        // Load scene meshes into both viewers
+        await this.loadSceneIntoViewer(this.leftViewer);
+        await this.loadSceneIntoViewer(this.rightViewer);
+        
+        // Start render loop for stereo viewers
+        this.renderStereoFrame();
+    }
+    
+    /**
+     * Load scene meshes into a viewer
+     */
+    private async loadSceneIntoViewer(viewer: any): Promise<void> {
+        // Load ground plane
+        const planeResponse = await fetch('/assets/rover/plane.obj');
+        const planeObj = await planeResponse.text();
+        viewer.load_mesh_at('ground-plane', planeObj, 0, 0, 0);
+        
+        // Load Wall-E rover (rotated 90 degrees to face cube)
+        const wallyResponse = await fetch('/assets/rover/wally.obj');
+        const wallyObj = await wallyResponse.text();
+        viewer.load_mesh_at_rotated('rover-wally', wallyObj, 0, 0, -10, -90.0);
+        
+        // Load target cube
+        const cubeResponse = await fetch('/assets/rover/cube.obj');
+        const cubeObj = await cubeResponse.text();
+        viewer.load_mesh_at('target-cube', cubeObj, 0, 0.5, 10);
+    }
+    
+    /**
+     * Render frame for stereo viewers
+     */
+    private renderStereoFrame = (): void => {
+        if (!this.leftViewer || !this.rightViewer || !this.rover) return;
+        
+        try {
+            // Calculate aspect ratio from canvas dimensions
+            const aspectRatio = this.stereoCanvasLeft 
+                ? this.stereoCanvasLeft.width / this.stereoCanvasLeft.height 
+                : 1.0;
+            
+            // Get view-projection matrices from rover for each eye
+            const leftMatrix = this.rover.get_left_view_projection_matrix(aspectRatio);
+            const rightMatrix = this.rover.get_right_view_projection_matrix(aspectRatio);
+            
+            // Render left eye
+            this.leftViewer.render_with_matrix(leftMatrix);
+            
+            // Render right eye
+            this.rightViewer.render_with_matrix(rightMatrix);
+            
+            // Continue rendering if still in stereo mode
+            if (this.currentViewMode === 'stereo') {
+                requestAnimationFrame(this.renderStereoFrame);
+            }
+        } catch (error) {
+            appLogger.error('Stereo render error:', error);
+        }
+    }
+    
+    /**
+     * Cleanup stereo viewers
+     */
+    private async cleanupStereoViewers(): Promise<void> {
+        if (this.leftViewer || this.rightViewer) {
+            appLogger.debug('Cleaning up stereo viewers');
+            
+            // Note: WASM ViewerHandle doesn't have explicit cleanup method
+            // Resources will be released when objects are garbage collected
+            this.leftViewer = null;
+            this.rightViewer = null;
+            this.stereoCanvasLeft = null;
+            this.stereoCanvasRight = null;
+        }
+    }
+    
     
     /**
      * Setup Depth Analysis layout (stereo pair + depth map + histogram)
@@ -541,17 +697,30 @@ export class RoverProject extends BaseProject {
     private updateRoverInfo(): void {
         if (!this.detailsPanel) return;
         
+        // Get rover info if available
+        let posX = 0, posY = 0, posZ = 0, yaw = 0, pitch = 0;
+        
+        if (this.rover) {
+            const pos = this.rover.get_position();
+            const orient = this.rover.get_orientation();
+            posX = pos[0];
+            posY = pos[1];
+            posZ = pos[2];
+            yaw = orient[0];
+            pitch = orient[1];
+        }
+        
         // Create rover info HTML
         const infoHTML = `
             <div class="rover-info">
                 <h3>Position</h3>
-                <p>X: ${this.roverPosition.x.toFixed(2)}m</p>
-                <p>Y: ${this.roverPosition.y.toFixed(2)}m</p>
-                <p>Z: ${this.roverPosition.z.toFixed(2)}m</p>
+                <p>X: ${posX.toFixed(2)}m</p>
+                <p>Y: ${posY.toFixed(2)}m</p>
+                <p>Z: ${posZ.toFixed(2)}m</p>
                 
                 <h3>Orientation</h3>
-                <p>Yaw: ${(this.roverRotation.yaw * 180 / Math.PI).toFixed(1)}°</p>
-                <p>Pitch: ${(this.roverRotation.pitch * 180 / Math.PI).toFixed(1)}°</p>
+                <p>Yaw: ${(yaw * 180 / Math.PI).toFixed(1)}°</p>
+                <p>Pitch: ${(pitch * 180 / Math.PI).toFixed(1)}°</p>
                 
                 <h3>Stereo Camera</h3>
                 <p>Baseline: ${this.cameraBaseline}m</p>

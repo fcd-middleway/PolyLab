@@ -1,4 +1,5 @@
 import type { UIComponent } from '../types/ui.types';
+import { HelpOverlay } from './HelpOverlay';
 
 /**
  * Header component - Top bar with title, project selector, and utility icons
@@ -9,11 +10,16 @@ export class Header implements UIComponent {
     private onProjectChange: ((projectId: string) => void) | null = null;
     private themeToggleBtn: HTMLButtonElement | null = null;
     private currentTheme: 'light' | 'dark' = 'dark';
+    private helpOverlay: HelpOverlay;
 
     constructor() {
+        this.helpOverlay = new HelpOverlay();
         this.element = this.createElement();
         this.loadTheme();
         this.attachEventListeners();
+        
+        // Append help overlay to body (it's a modal)
+        document.body.appendChild(this.helpOverlay.element);
     }
 
     private createElement(): HTMLElement {
@@ -34,7 +40,7 @@ export class Header implements UIComponent {
                 <button class="icon-btn" id="theme-toggle" title="Toggle theme">
                     <span class="icon">🌙</span>
                 </button>
-                <button class="icon-btn" id="help-btn" title="Help">
+                <button class="icon-btn" id="help-btn" title="Help (Ctrl+H)">
                     <span class="icon">?</span>
                 </button>
                 <button class="icon-btn" id="github-btn" title="GitHub">
@@ -144,7 +150,7 @@ export class Header implements UIComponent {
 
         // Help button
         this.element.querySelector('#help-btn')?.addEventListener('click', () => {
-            console.log('[Header] Help button clicked');
+            this.helpOverlay.toggle();
         });
 
         // GitHub button
@@ -158,6 +164,7 @@ export class Header implements UIComponent {
     }
 
     destroy(): void {
+        this.helpOverlay.destroy();
         this.element.remove();
     }
 }

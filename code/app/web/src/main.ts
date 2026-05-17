@@ -19,6 +19,7 @@ import './styles/header.css';
 import './styles/toolbar.css';
 import './styles/panels.css';
 import './styles/statusbar.css';
+import './styles/help.css';
 
 /**
  * Initialize the UI components

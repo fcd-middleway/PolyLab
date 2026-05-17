@@ -43,8 +43,8 @@ export class Header implements UIComponent {
                 <button class="icon-btn" id="help-btn" title="Help (Ctrl+H)">
                     <span class="icon">?</span>
                 </button>
-                <button class="icon-btn" id="github-btn" title="GitHub">
-                    <span class="icon">⚙</span>
+                <button class="icon-btn" id="github-btn" title="View on GitHub">
+                    <span class="icon">↗</span>
                 </button>
             </div>
         `;
@@ -155,7 +155,7 @@ export class Header implements UIComponent {
 
         // GitHub button
         this.element.querySelector('#github-btn')?.addEventListener('click', () => {
-            console.log('[Header] GitHub button clicked');
+            window.open('https://github.com/fcd-middleway/PolyLab', '_blank', 'noopener,noreferrer');
         });
     }
 

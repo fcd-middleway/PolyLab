@@ -34,11 +34,19 @@ export class UIManager {
         
         this.currentConfig = config;
 
-        // Reconfigure menus
-        this.reconfigureMenus(config.menuItems);
-
-        // Reconfigure toolbar
-        this.reconfigureToolbar(config.toolbarActions);
+        // Configure toolbar with generic menus + project actions + layout actions
+        if (config.genericMenuCallbacks) {
+            // New system: use generic menus with callbacks
+            this.toolbar.configure(config.genericMenuCallbacks, config.toolbarActions, config.layoutActions);
+        } else if (config.menuItems) {
+            // Legacy system: use custom menuItems (DEPRECATED)
+            uiLogger.warn('Using deprecated menuItems - migrate to genericMenuCallbacks');
+            this.reconfigureMenus(config.menuItems);
+            this.reconfigureToolbar(config.toolbarActions);
+        } else {
+            // No menu configuration, use default empty callbacks
+            this.toolbar.configure({}, config.toolbarActions, config.layoutActions);
+        }
 
         // Configure drop zone if specified
         this.toolbar.configureDropZone(config.dropZone || null);
@@ -46,8 +54,8 @@ export class UIManager {
         // TODO: Reconfigure panels when PanelContainer is implemented
 
         uiLogger.debug('UI configuration applied', { 
-            menuItems: config.menuItems.length,
             toolbarActions: config.toolbarActions.length,
+            layoutActions: config.layoutActions?.length || 0,
             panels: config.panels.length,
             dropZoneEnabled: config.dropZone?.enabled || false
         });

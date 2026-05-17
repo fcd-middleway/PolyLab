@@ -51,29 +51,14 @@ export class RoverProject extends BaseProject {
             name: 'Rover Vision',
             icon: '🤖',
             
-            menuItems: [
-                { 
-                    label: 'Rover',
-                    submenu: [
-                        { label: 'Reset Position', action: () => this.resetRover() },
-                        { label: 'Capture Stereo Pair', action: () => this.captureStereo() },
-                        { separator: true },
-                        { label: 'Process Depth Map', action: () => this.processDepthMap(), enabled: false },
-                        { label: 'Generate Point Cloud', action: () => this.generatePointCloud(), enabled: false }
-                    ]
+            genericMenuCallbacks: {
+                file: {
+                    onLoadMesh: () => this.openFilePicker()
                 },
-                {
-                    label: 'View',
-                    submenu: [
-                        { label: '🎬 Scene Explorer', action: () => this.switchViewMode('scene') },
-                        { label: '👁️ Stereo Vision', action: () => this.switchViewMode('stereo') },
-                        { label: '🔬 Depth Analysis', action: () => this.switchViewMode('depth') },
-                        { separator: true },
-                        { label: '🎯 Full Analysis Grid', action: () => this.switchViewMode('full-grid'), enabled: false },
-                        { label: '🎨 Point Cloud Focus', action: () => this.switchViewMode('point-cloud'), enabled: false }
-                    ]
+                view: {
+                    // Camera controls not implemented yet
                 }
-            ],
+            },
 
             toolbarActions: [
                 {
@@ -87,6 +72,39 @@ export class RoverProject extends BaseProject {
                     icon: '📸',
                     tooltip: 'Capture Stereo Pair',
                     action: () => this.captureStereo()
+                }
+            ],
+
+            layoutActions: [
+                {
+                    id: 'scene-view',
+                    icon: '🎬',
+                    tooltip: 'Scene',
+                    action: () => this.switchViewMode('scene')
+                },
+                {
+                    id: 'stereo-view',
+                    icon: '👁️',
+                    tooltip: 'Stereo',
+                    action: () => this.switchViewMode('stereo')
+                },
+                {
+                    id: 'depth-view',
+                    icon: '🔬',
+                    tooltip: 'Depth',
+                    action: () => this.switchViewMode('depth')
+                },
+                {
+                    id: 'grid-view',
+                    icon: '🎯',
+                    tooltip: 'Full Grid',
+                    action: () => this.switchViewMode('full-grid')
+                },
+                {
+                    id: 'cloud-view',
+                    icon: '🎨',
+                    tooltip: 'Point Cloud',
+                    action: () => this.switchViewMode('point-cloud')
                 }
             ],
 
@@ -736,5 +754,62 @@ export class RoverProject extends BaseProject {
             sizeY: 0,
             sizeZ: 0
         });
+    }
+
+    /**
+     * Handle mesh file loaded from file picker (inherited from BaseProject)
+     */
+    protected async onMeshFileLoaded(content: string, filename: string): Promise<void> {
+        try {
+            appLogger.info('[RoverProject] Loading mesh from file picker', { filename, size: content.length });
+            this.statusBar?.updateStats({ status: `Loading ${filename}...` });
+            
+            // Generate unique mesh ID
+            const meshId = `mesh-${Date.now()}`;
+            
+            // Load mesh into appropriate viewer based on current mode
+            if (this.currentViewMode === 'stereo' && this.leftViewer && this.rightViewer) {
+                // Load in both stereo viewers
+                this.leftViewer.load_mesh(meshId, content);
+                this.rightViewer.load_mesh(meshId, content);
+            } else if (this.viewer) {
+                // Load in main viewer
+                this.viewer.load_mesh(meshId, content);
+            }
+            
+            // Get mesh details
+            const viewer = this.viewer || this.leftViewer;
+            if (viewer) {
+                const details = viewer.mesh_details(meshId);
+                const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
+                
+                // Add mesh to MeshPanel
+                this.meshPanel?.addMesh({
+                    id: meshId,
+                    name: filename,
+                    vertices: Math.round(vertices),
+                    triangles: Math.round(triangles),
+                    visible: true
+                });
+                
+                // Update status bar
+                this.statusBar?.updateStats({ 
+                    status: `✅ Loaded ${filename}`,
+                    vertices: Math.round(vertices),
+                    triangles: Math.round(triangles)
+                });
+                
+                appLogger.info('[RoverProject] Mesh loaded successfully', { 
+                    meshId,
+                    filename, 
+                    vertices: Math.round(vertices), 
+                    triangles: Math.round(triangles)
+                });
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            appLogger.error('[RoverProject] Failed to load mesh', { filename, error: errorMsg });
+            this.statusBar?.updateStats({ status: `❌ ${errorMsg}` });
+        }
     }
 }

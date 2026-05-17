@@ -1,6 +1,7 @@
 import type { UIComponent } from '../types/ui.types';
-import type { ToolbarAction, DropZoneConfig, MenuItem } from '../core/types';
+import type { ToolbarAction, DropZoneConfig, MenuItem, GenericMenuCallbacks } from '../core/types';
 import { createFileInput, setupDropZone } from '../utils/meshLoader';
+import { getFileMenu, getViewMenu } from '../config/genericMenus';
 
 /**
  * Toolbar component - Dynamic action buttons bar with optional drop zone
@@ -17,6 +18,31 @@ export class Toolbar implements UIComponent {
     constructor() {
         this.element = this.createElement();
         this.attachGlobalListeners();
+    }
+
+    /**
+     * Configure toolbar with generic menus and project-specific actions
+     * This is the main method to use - it replaces setMenuItems() and setActions()
+     * 
+     * @param callbacks - Callbacks for generic File and View menus
+     * @param actions - Project-specific toolbar actions
+     * @param layoutActions - Layout/view mode buttons (optional)
+     */
+    public configure(callbacks: GenericMenuCallbacks, actions: ToolbarAction[], layoutActions?: ToolbarAction[]): void {
+        // Build generic menus
+        const genericMenus: MenuItem[] = [
+            getFileMenu(callbacks.file || {}),
+            getViewMenu(callbacks.view || {})
+        ];
+
+        // Set menus (generic File and View)
+        this.setMenuItems(genericMenus);
+
+        // Set project-specific actions
+        this.setActions(actions);
+        
+        // Set layout actions if provided
+        this.setLayoutActions(layoutActions || []);
     }
 
     /**
@@ -195,11 +221,17 @@ export class Toolbar implements UIComponent {
      * Called by UIManager when project changes
      */
     public configureDropZone(config: DropZoneConfig | null): void {
-        // Remove existing drop zone if any
-        if (this.dropZoneElement) {
-            this.dropZoneElement.remove();
-            this.dropZoneElement = null;
+        // Remove existing drop zone and its divider if any
+        const existingDropZone = this.element.querySelector('#drop-zone');
+        if (existingDropZone) {
+            // Remove the divider before the drop zone
+            const prevElement = existingDropZone.previousElementSibling;
+            if (prevElement && prevElement.classList.contains('toolbar-divider')) {
+                prevElement.remove();
+            }
+            existingDropZone.remove();
         }
+        this.dropZoneElement = null;
 
         // Remove existing file input
         if (this.fileInput) {
@@ -235,6 +267,79 @@ export class Toolbar implements UIComponent {
         this.dropZoneElement.addEventListener('click', () => {
             this.fileInput?.click();
         });
+    }
+
+    /**
+     * Set layout action buttons (view modes)
+     */
+    private setLayoutActions(actions: ToolbarAction[]): void {
+        // Remove existing layout actions container
+        const existingContainer = this.element.querySelector('#toolbar-layout-actions');
+        if (existingContainer) {
+            const prevElement = existingContainer.previousElementSibling;
+            if (prevElement && prevElement.classList.contains('toolbar-divider')) {
+                prevElement.remove();
+            }
+            existingContainer.remove();
+        }
+        
+        if (actions.length === 0) return;
+        
+        // Create divider before layout actions
+        const divider = document.createElement('div');
+        divider.className = 'toolbar-divider';
+        
+        // Create layout actions container
+        const container = document.createElement('div');
+        container.id = 'toolbar-layout-actions';
+        container.className = 'toolbar-layout-actions';
+        
+        // Create buttons for each layout action
+        actions.forEach((action, index) => {
+            const button = document.createElement('button');
+            button.className = 'toolbar-layout-btn';
+            button.id = `toolbar-layout-${action.id}`;
+            button.title = action.tooltip;
+            button.disabled = action.enabled === false;
+            
+            // First button is active by default
+            if (index === 0 && action.enabled !== false) {
+                button.classList.add('active');
+            }
+            
+            button.innerHTML = `
+                <span class="icon">${action.icon}</span>
+                <span class="label">${action.tooltip}</span>
+            `;
+            
+            button.addEventListener('click', () => {
+                if (!button.disabled) {
+                    // Remove active class from all layout buttons
+                    container.querySelectorAll('.toolbar-layout-btn').forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                    // Add active class to clicked button
+                    button.classList.add('active');
+                    // Execute action
+                    action.action();
+                }
+            });
+            
+            container.appendChild(button);
+        });
+        
+        // Insert before drop zone or at end
+        const dropZone = this.element.querySelector('#drop-zone');
+        if (dropZone && dropZone.previousElementSibling) {
+            // Insert before drop zone divider
+            const dropZoneDivider = dropZone.previousElementSibling;
+            this.element.insertBefore(container, dropZoneDivider);
+            this.element.insertBefore(divider, container);
+        } else {
+            // Insert at end
+            this.element.appendChild(divider);
+            this.element.appendChild(container);
+        }
     }
 
     private createElement(): HTMLElement {

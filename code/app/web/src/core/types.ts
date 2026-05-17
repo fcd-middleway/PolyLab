@@ -46,13 +46,29 @@ export interface DropZoneConfig {
 }
 
 /**
+ * Callbacks for generic menus (File, View)
+ */
+export interface GenericMenuCallbacks {
+    file?: {
+        onLoadMesh?: () => void;
+        onExportScene?: () => void;
+    };
+    view?: {
+        onResetCamera?: () => void;
+        onCenterMesh?: () => void;
+    };
+}
+
+/**
  * Project configuration
  */
 export interface ProjectConfig {
     name: string;
     icon: string;
-    menuItems: MenuItem[];
+    genericMenuCallbacks?: GenericMenuCallbacks; // Callbacks for File and View menus
+    menuItems?: MenuItem[]; // DEPRECATED: Use genericMenuCallbacks instead
     toolbarActions: ToolbarAction[];
+    layoutActions?: ToolbarAction[]; // Layout/view mode buttons (right side)
     panels: PanelDefinition[];
     dropZone?: DropZoneConfig; // Optional drag & drop zone
 }

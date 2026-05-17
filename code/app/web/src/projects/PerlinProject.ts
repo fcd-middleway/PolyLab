@@ -45,23 +45,14 @@ export class PerlinProject extends BaseProject {
             name: 'Perlin Terrain',
             icon: '🏔️',
             
-            menuItems: [
-                { 
-                    label: 'Terrain',
-                    submenu: [
-                        { label: 'Generate Terrain', action: () => this.generateTerrain() },
-                        { separator: true },
-                        { label: 'Clear Terrain', action: () => this.clearTerrain(), enabled: false }
-                    ]
+            genericMenuCallbacks: {
+                file: {
+                    onLoadMesh: () => this.openFilePicker()
                 },
-                {
-                    label: 'View',
-                    submenu: [
-                        { label: 'Reset Camera', action: () => this.resetCamera(), enabled: false },
-                        { label: 'Center Terrain', action: () => this.centerTerrain(), enabled: false }
-                    ]
+                view: {
+                    // Camera controls not implemented yet
                 }
-            ],
+            },
 
             toolbarActions: [
                 {
@@ -69,6 +60,15 @@ export class PerlinProject extends BaseProject {
                     icon: '🏔️',
                     tooltip: 'Generate Terrain',
                     action: () => this.generateTerrain()
+                }
+            ],
+
+            layoutActions: [
+                {
+                    id: 'normal-view',
+                    icon: '🎬',
+                    tooltip: 'Scene',
+                    action: () => { /* Single view mode */ }
                 }
             ],
 
@@ -314,6 +314,62 @@ export class PerlinProject extends BaseProject {
      */
     private centerTerrain(): void {
         appLogger.warn('Center terrain not implemented yet');
+    }
+
+    /**
+     * Handle mesh file loaded from file picker (inherited from BaseProject)
+     */
+    protected async onMeshFileLoaded(content: string, filename: string): Promise<void> {
+        try {
+            appLogger.info('[PerlinProject] Loading mesh from file picker', { filename, size: content.length });
+            this.statusBar?.updateStats({ status: `Loading ${filename}...` });
+            
+            // Generate unique mesh ID
+            const meshId = `mesh-${Date.now()}`;
+            
+            // Call WASM function to load mesh
+            this.viewer.load_mesh(meshId, content);
+            
+            // Get detailed mesh info from viewer
+            const details = this.viewer.mesh_details(meshId);
+            const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
+            
+            // Add mesh to MeshPanel
+            this.meshPanel?.addMesh({
+                id: meshId,
+                name: filename,
+                vertices: Math.round(vertices),
+                triangles: Math.round(triangles),
+                visible: true
+            });
+            
+            // Update DetailsPanel with dimensions
+            this.detailsPanel?.updateDetails({
+                vertices: Math.round(vertices),
+                triangles: Math.round(triangles),
+                sizeX,
+                sizeY,
+                sizeZ
+            });
+            
+            // Update status bar
+            this.statusBar?.updateStats({ 
+                status: `✅ Loaded ${filename}`,
+                vertices: Math.round(vertices),
+                triangles: Math.round(triangles)
+            });
+            
+            appLogger.info('[PerlinProject] Mesh loaded successfully', { 
+                meshId,
+                filename, 
+                vertices: Math.round(vertices), 
+                triangles: Math.round(triangles)
+            });
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            appLogger.error('[PerlinProject] Failed to load mesh', { filename, error: errorMsg });
+            this.statusBar?.updateStats({ status: `❌ ${errorMsg}` });
+        }
     }
 
     /**

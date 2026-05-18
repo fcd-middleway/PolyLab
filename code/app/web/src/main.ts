@@ -10,6 +10,7 @@ import { UIManager } from './core/UIManager';
 import { ViewerProject } from './projects/ViewerProject';
 import { PerlinProject } from './projects/PerlinProject';
 import { RoverProject } from './projects/RoverProject';
+import { CompressionProject } from './projects/CompressionProject';
 import { CameraControls } from './utils/cameraControls';
 import { appLogger, viewerLogger } from './utils/logger';
 
@@ -188,6 +189,16 @@ async function main() {
         // Register RoverProject (will be initialized when activated)
         projectManager.registerProject(roverProject);
         appLogger.info('RoverProject registered');
+
+        // Create CompressionProject
+        const compressionProject = new CompressionProject();
+        
+        // Inject UI components into CompressionProject
+        compressionProject.setUIComponents(ui.meshPanel, ui.detailsPanel, ui.statusBar);
+        
+        // Register CompressionProject (will be initialized when activated)
+        projectManager.registerProject(compressionProject);
+        appLogger.info('CompressionProject registered');
 
         // Configure header with available projects
         const projects = projectManager.getProjects();

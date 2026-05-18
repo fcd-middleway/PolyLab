@@ -116,11 +116,6 @@ impl Renderer {
             camera,
             light,
             aspect_ratio,
-            stereo_baseline: 0.3, // 30cm baseline for rover stereo cameras
-            rover_position: Vec3::new(0.0, 0.0, 0.0), // Rover at origin initially
-            rover_yaw: 0.0,
-            rover_pitch: 0.0,
-            rover_eye_height: 0.8, // Wall-E's eyes are ~80cm above ground
         })
     }
 

@@ -4,7 +4,8 @@ members = [
     "code/crates/polylab-viewer",
     "code/crates/polylab-desktop",
     "code/crates/polylab-perlin",
-    "code/crates/polylab-rover"
+    "code/crates/polylab-rover",
+    "code/crates/polylab-compression"
 ]
 resolver = "2"
 

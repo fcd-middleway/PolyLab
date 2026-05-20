@@ -2,11 +2,11 @@
 
 use wgpu;
 
-/// Background clear color (dark gray)
+/// Background clear color (white for better contrast)
 pub const CLEAR_COLOR: wgpu::Color = wgpu::Color {
-    r: 0.1,
-    g: 0.1,
-    b: 0.1,
+    r: 1.0,
+    g: 1.0,
+    b: 1.0,
     a: 1.0,
 };
 

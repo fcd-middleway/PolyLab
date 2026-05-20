@@ -14,8 +14,10 @@ bytemuck = { version = "1.14", features = ["derive"] }
 pollster = "0.3"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+polylab-compression = { path = "../polylab-compression", features = ["wasm"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
 web-sys = { version = "0.3", features = [
     "Document",
     "Window",

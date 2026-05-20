@@ -431,3 +431,42 @@
     transform: rotate(-90deg);
 }
 
+/* Compression stats styles */
+.compression-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.compression-stats .stats-section {
+    background: var(--bg-secondary);
+    padding: 12px;
+    border-radius: 4px;
+}
+
+.compression-stats .stats-section h5 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.compression-stats .stats-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 13px;
+}
+
+.compression-stats .stats-row span:first-child {
+    color: var(--text-secondary);
+}
+
+.compression-stats .stats-row span:last-child {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+

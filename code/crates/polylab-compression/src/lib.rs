@@ -5,10 +5,23 @@
 //! This module provides algorithms for compressing 3D meshes progressively,
 //! allowing incremental transmission and visualization.
 
+pub mod entropy;
 pub mod types;
+pub mod aif;
+pub mod decimation;
+pub mod wasm_api;
 
 // Re-export main types
 pub use types::{CompressedMesh, CompressionStats};
+
+// Re-export entropy types
+pub use entropy::{ArithmeticDecoder, ArithmeticEncoder, BitReader, BitWriter, Context};
+
+// Re-export AIF types
+pub use aif::{AIF, VertexId, EdgeId, FaceId, CornerId};
+
+// Re-export WASM API
+pub use wasm_api::{CompressionHandle, MeshStats, SimplifyResult};
 
 use polylab_core::Mesh;
 

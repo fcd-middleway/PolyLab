@@ -56,7 +56,7 @@ fn vs_main(
     return out;
 }
 
-// Fragment shader - applies Lambertian shading with directional light
+// Fragment shader - applies improved Lambertian shading with hemisphere lighting
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Normalize interpolated normal (GPU interpolation can change length)
@@ -67,11 +67,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // max(..., 0.0) ensures we don't get negative lighting on back faces
     let diffuse = max(dot(normal, -light.direction), 0.0);
     
-    // Combine ambient + diffuse lighting
-    let lighting = light.ambient + (diffuse * light.intensity);
+    // Hemisphere lighting: interpolate between sky and ground based on normal.y
+    // This adds soft ambient occlusion effect
+    let sky_color = vec3<f32>(0.6, 0.7, 0.8);    // Soft blue sky
+    let ground_color = vec3<f32>(0.4, 0.35, 0.3); // Warm ground
+    let hemisphere = mix(ground_color, sky_color, normal.y * 0.5 + 0.5);
+    
+    // Combine hemisphere ambient + directional diffuse
+    let ambient_contribution = light.ambient * hemisphere;
+    let diffuse_contribution = diffuse * light.intensity * light.color;
+    let lighting = ambient_contribution + diffuse_contribution;
     
     // Apply lighting to vertex color
-    let lit_color = in.color * light.color * lighting;
+    let lit_color = in.color * lighting;
     
     return vec4<f32>(lit_color, 1.0);
 }

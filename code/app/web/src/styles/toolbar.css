@@ -223,3 +223,71 @@
     color: var(--text-primary);
     font-weight: 500;
 }
+
+/* ========================================
+   Toolbar Sections (FILE | VIEW | MODE)
+   ======================================== */
+
+.toolbar-section {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-section-file {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-section-view {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-section-mode {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Drop zone more compact */
+.toolbar-section-file .drop-zone {
+    flex: 0 0 auto;
+    min-width: 180px;
+    max-width: 250px;
+    padding: 8px 16px;
+    font-size: 12px;
+}
+
+.drop-zone-icon {
+    margin-right: 6px;
+}
+
+.drop-zone-text {
+    font-size: 11px;
+}
+
+/* Toggle buttons styling */
+.toolbar-btn-toggle {
+    min-width: 65px;
+}
+
+.toolbar-btn-toggle.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.toolbar-btn-toggle.active .label {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.toolbar-btn-toggle.active .icon {
+    color: var(--text-primary);
+}

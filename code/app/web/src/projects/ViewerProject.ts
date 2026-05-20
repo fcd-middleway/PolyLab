@@ -92,14 +92,11 @@ export class ViewerProject extends BaseProject {
             name: '3D Viewer',
             icon: '👁️',
             
-            genericMenuCallbacks: {
-                file: {
-                    onLoadMesh: () => this.openFilePicker()
-                },
-                view: {
-                    // Camera controls not implemented yet
-                }
+            fileCallbacks: {
+                onLoad: onLoad
             },
+            
+            // NOTE: viewCallbacks are now configured globally in UIManager.setViewer()
 
             toolbarActions: [
                 // No project-specific actions for now

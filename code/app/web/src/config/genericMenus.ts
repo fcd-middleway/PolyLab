@@ -31,6 +31,9 @@ export function getFileMenu(callbacks: {
 export function getViewMenu(callbacks: {
     onResetCamera?: () => void;
     onCenterMesh?: () => void;
+    onToggleSolid?: () => void;
+    onToggleWireframe?: () => void;
+    onToggleVertices?: () => void;
 }): MenuItem {
     return {
         label: 'View',
@@ -44,6 +47,22 @@ export function getViewMenu(callbacks: {
                 label: 'Center Mesh', 
                 action: callbacks.onCenterMesh,
                 enabled: false // Not implemented yet
+            },
+            { separator: true },
+            {
+                label: '☑️ Solid',
+                action: callbacks.onToggleSolid,
+                enabled: !!callbacks.onToggleSolid
+            },
+            {
+                label: '☐ Wireframe',
+                action: callbacks.onToggleWireframe,
+                enabled: !!callbacks.onToggleWireframe
+            },
+            {
+                label: '☐ Vertices',
+                action: callbacks.onToggleVertices,
+                enabled: !!callbacks.onToggleVertices
             }
         ]
     };

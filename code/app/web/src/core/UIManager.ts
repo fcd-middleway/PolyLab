@@ -16,6 +16,7 @@ export class UIManager {
     private meshPanel: MeshPanel | null = null;
     private detailsPanel: PropertiesPanel | null = null;
     private currentConfig: ProjectConfig | null = null;
+    private viewer: any = null; // WASM viewer handle
 
     /**
      * Create a new UIManager
@@ -32,6 +33,39 @@ export class UIManager {
     }
 
     /**
+     * Set the viewer and configure common VIEW section callbacks
+     * This should be called ONCE after viewer initialization
+     * 
+     * @param viewer - The WASM viewer handle
+     */
+    setViewer(viewer: any): void {
+        this.viewer = viewer;
+        
+        // Configure VIEW section callbacks (common to ALL projects)
+        this.toolbar.configureViewCallbacks({
+            onResetCamera: () => {
+                uiLogger.info('Reset camera (not implemented yet)');
+                // TODO: Implement camera reset
+            },
+            onCenterMesh: () => {
+                uiLogger.info('Center mesh (not implemented yet)');
+                // TODO: Implement mesh centering
+            },
+            onRenderModeChange: (modes) => {
+                uiLogger.info('[UIManager] Render modes changed (common)', modes);
+                if (this.viewer) {
+                    this.viewer.set_render_modes(modes.solid, modes.wireframe, modes.vertices);
+                    uiLogger.info('[UIManager] Called viewer.set_render_modes', modes);
+                } else {
+                    uiLogger.warn('[UIManager] Viewer not set yet');
+                }
+            }
+        });
+        
+        uiLogger.info('UIManager viewer set and VIEW callbacks configured (common to all projects)');
+    }
+
+    /**
      * Apply project configuration to UI
      * Reconfigures all UI components based on project config
      * 
@@ -42,22 +76,26 @@ export class UIManager {
         
         this.currentConfig = config;
 
-        // Configure toolbar with generic menus + project actions + layout actions
-        if (config.genericMenuCallbacks) {
-            // New system: use generic menus with callbacks
-            this.toolbar.configure(config.genericMenuCallbacks, config.toolbarActions, config.layoutActions);
-        } else if (config.menuItems) {
-            // Legacy system: use custom menuItems (DEPRECATED)
-            uiLogger.warn('Using deprecated menuItems - migrate to genericMenuCallbacks');
-            this.reconfigureMenus(config.menuItems);
-            this.reconfigureToolbar(config.toolbarActions);
-        } else {
-            // No menu configuration, use default empty callbacks
-            this.toolbar.configure({}, config.toolbarActions, config.layoutActions);
+        // Configure FILE section callbacks (project-specific)
+        if (config.fileCallbacks) {
+            this.toolbar.configureFileCallbacks(config.fileCallbacks);
+        } else if (config.dropZone?.enabled) {
+            // Legacy: convert dropZone to fileCallbacks
+            this.toolbar.configureFileCallbacks({
+                onLoad: (content, filename) => {
+                    config.dropZone!.onLoad(content, filename).catch(err => {
+                        config.dropZone!.onError(err.message);
+                    });
+                },
+                onError: (error) => config.dropZone!.onError(error.message)
+            });
         }
 
-        // Configure drop zone if specified
-        this.toolbar.configureDropZone(config.dropZone || null);
+        // NOTE: VIEW section is configured ONCE in setViewer(), not per-project
+        // This ensures common behavior across all projects
+
+        // Set MODE section actions (project-specific)
+        this.toolbar.setModeActions(config.toolbarActions);
 
         // Configure panels with titles from config
         this.configurePanels(config.panels);
@@ -66,24 +104,8 @@ export class UIManager {
             toolbarActions: config.toolbarActions.length,
             layoutActions: config.layoutActions?.length || 0,
             panels: config.panels.length,
-            dropZoneEnabled: config.dropZone?.enabled || false
+            fileCallbacksEnabled: !!config.fileCallbacks
         });
-    }
-
-    /**
-     * Reconfigure menus with new items
-     */
-    private reconfigureMenus(menuItems: MenuItem[]): void {
-        uiLogger.debug(`Configuring menus with ${menuItems.length} top-level items`);
-        this.toolbar.setMenuItems(menuItems);
-    }
-
-    /**
-     * Reconfigure toolbar with new actions
-     */
-    private reconfigureToolbar(actions: ToolbarAction[]): void {
-        uiLogger.debug(`Configuring toolbar with ${actions.length} actions`);
-        this.toolbar.setActions(actions);
     }
 
     /**

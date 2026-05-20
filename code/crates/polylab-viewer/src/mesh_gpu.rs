@@ -64,8 +64,8 @@ impl MeshGPU {
             .vertices
             .iter()
             .map(|v| {
-                // Use vertex color if available, otherwise default to light gray
-                let color = v.color.unwrap_or(glam::Vec3::new(0.7, 0.7, 0.7));
+                // Use vertex color if available, otherwise default to light burgundy
+                let color = v.color.unwrap_or(glam::Vec3::new(0.85, 0.6, 0.6));
                 
                 // Use vertex normal if available, otherwise default to up (Y+)
                 let normal = v.normal.unwrap_or(glam::Vec3::new(0.0, 1.0, 0.0));
@@ -156,7 +156,7 @@ mod tests {
             color: Some(Vec3::new(0.5, 0.6, 0.7)),
         };
 
-        let color = cpu_vertex.color.unwrap_or(Vec3::new(0.7, 0.7, 0.7));
+        let color = cpu_vertex.color.unwrap_or(Vec3::new(0.85, 0.6, 0.6));
         let normal = cpu_vertex.normal.unwrap_or(Vec3::new(0.0, 1.0, 0.0));
         let gpu_vertex = GpuVertex {
             position: [cpu_vertex.position.x, cpu_vertex.position.y, cpu_vertex.position.z],

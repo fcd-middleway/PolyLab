@@ -12,8 +12,8 @@ mod camera;
 mod light;
 
 // Public exports for desktop usage
-pub use pipeline::create_render_pipeline;
-pub use renderer::Renderer;
+pub use pipeline::{create_render_pipeline, create_wireframe_pipeline, create_vertices_pipeline};
+pub use renderer::{Renderer, RenderModeFlags};
 pub use mesh_gpu::{MeshGPU, GpuVertex};
 pub use camera::Camera;
 pub use light::DirectionalLight;
@@ -27,13 +27,16 @@ use wasm_bindgen::prelude::*;
 
 /// Main viewer handle exposed to JavaScript
 ///
-/// Wraps Renderer and RenderPipeline. Entry point for WASM API.
+/// Wraps Renderer and RenderPipelines. Entry point for WASM API.
 /// Created via `ViewerHandle.create(canvas_id)` in JS.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct ViewerHandle {
     renderer: Renderer,
-    pipeline: wgpu::RenderPipeline,
+    solid_pipeline: wgpu::RenderPipeline,
+    wireframe_pipeline: wgpu::RenderPipeline,
+    vertices_pipeline: wgpu::RenderPipeline,
+    render_modes: RenderModeFlags,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -84,18 +87,34 @@ impl ViewerHandle {
                 JsValue::from_str(&format!("WebGPU initialization failed: {}. Make sure your browser supports WebGPU.", e))
             })?;
 
-        log::debug!("Renderer created, building render pipeline...");
+        log::debug!("Renderer created, building render pipelines...");
         
-        // Create render pipeline with bind group layout
+        // Create render pipelines with bind group layout
         let bind_group_layout = renderer.bind_group_layout();
-        let pipeline = create_render_pipeline(
+        let solid_pipeline = create_render_pipeline(
+            renderer.device(),
+            renderer.surface_format(),
+            &bind_group_layout,
+        );
+        let wireframe_pipeline = create_wireframe_pipeline(
+            renderer.device(),
+            renderer.surface_format(),
+            &bind_group_layout,
+        );
+        let vertices_pipeline = create_vertices_pipeline(
             renderer.device(),
             renderer.surface_format(),
             &bind_group_layout,
         );
 
         log::info!("Viewer created successfully");
-        Ok(ViewerHandle { renderer, pipeline })
+        Ok(ViewerHandle { 
+            renderer, 
+            solid_pipeline,
+            wireframe_pipeline,
+            vertices_pipeline,
+            render_modes: RenderModeFlags::solid_only(),
+        })
     }
 
     /// Render a frame
@@ -105,7 +124,12 @@ impl ViewerHandle {
     #[wasm_bindgen]
     pub fn render(&mut self) -> Result<(), JsValue> {
         self.renderer
-            .render(&self.pipeline)
+            .render_multi_pass(
+                &self.solid_pipeline,
+                &self.wireframe_pipeline,
+                &self.vertices_pipeline,
+                &self.render_modes,
+            )
             .map_err(|e| JsValue::from_str(&e))
     }
 
@@ -115,6 +139,31 @@ impl ViewerHandle {
     #[wasm_bindgen]
     pub fn resize(&mut self, width: u32, height: u32) {
         self.renderer.resize(width, height);
+    }
+
+    /// Set render modes (solid, wireframe, vertices)
+    ///
+    /// Controls which rendering passes are active.
+    /// All modes can be active simultaneously for debugging.
+    #[wasm_bindgen]
+    pub fn set_render_modes(&mut self, solid: bool, wireframe: bool, vertices: bool) {
+        self.render_modes = RenderModeFlags {
+            solid,
+            wireframe,
+            vertices,
+        };
+        log::info!("Render modes updated: solid={}, wireframe={}, vertices={}", solid, wireframe, vertices);
+    }
+
+    /// Get current render mode settings
+    #[wasm_bindgen]
+    pub fn get_render_modes(&self) -> JsValue {
+        use wasm_bindgen::JsCast;
+        let obj = js_sys::Object::new();
+        js_sys::Reflect::set(&obj, &"solid".into(), &JsValue::from(self.render_modes.solid)).unwrap();
+        js_sys::Reflect::set(&obj, &"wireframe".into(), &JsValue::from(self.render_modes.wireframe)).unwrap();
+        js_sys::Reflect::set(&obj, &"vertices".into(), &JsValue::from(self.render_modes.vertices)).unwrap();
+        obj.into()
     }
 
     /// Load a mesh from OBJ file content
@@ -555,8 +604,112 @@ impl ViewerHandle {
         let matrix = glam::Mat4::from_cols_array(&array);
         
         self.renderer
-            .render_with_view_projection(&self.pipeline, matrix)
+            .render_with_view_projection(&self.solid_pipeline, matrix)
             .map_err(|e| JsValue::from_str(&e))
+    }
+
+    // ========================
+    // Compression API
+    // ========================
+
+    /// Create a compression handle for mesh simplification
+    ///
+    /// This creates a handle that can be used to progressively simplify a mesh
+    /// using various decimation metrics (edge length, QEM, etc.)
+    ///
+    /// # Parameters
+    /// * `mesh_id` - Unique identifier for the mesh
+    /// * `vertices` - Flattened vertex positions [x, y, z, x, y, z, ...]
+    /// * `faces` - Face indices (triangles: [i0, i1, i2, i0, i1, i2, ...])
+    ///
+    /// # Returns
+    /// A CompressionHandle that can be used for simplification operations
+    ///
+    /// # Example
+    /// ```javascript
+    /// const vertices = new Float32Array([
+    ///     0, 0, 0,  // v0
+    ///     1, 0, 0,  // v1
+    ///     0, 1, 0   // v2
+    /// ]);
+    /// const faces = new Uint32Array([0, 1, 2]);
+    /// const handle = viewer.create_compression_handle("my-mesh", vertices, faces);
+    /// ```
+    #[wasm_bindgen]
+    pub fn create_compression_handle(
+        &self,
+        mesh_id: String,
+        vertices: Vec<f32>,
+        faces: Vec<u32>,
+    ) -> Result<polylab_compression::CompressionHandle, JsValue> {
+        log::info!("Creating compression handle for mesh: {}", mesh_id);
+        log::debug!("Mesh data: {} vertices, {} faces", vertices.len() / 3, faces.len() / 3);
+        
+        polylab_compression::CompressionHandle::new(mesh_id, vertices, faces)
+    }
+
+    /// Update an existing mesh with new geometry
+    ///
+    /// This replaces the vertex and face data of an existing mesh in the scene.
+    /// Useful for updating meshes after simplification or other operations.
+    ///
+    /// # Parameters
+    /// * `mesh_id` - Identifier of the mesh to update (must exist in scene)
+    /// * `vertices` - New flattened vertex positions [x, y, z, x, y, z, ...]
+    /// * `faces` - New face indices (triangles)
+    ///
+    /// # Example
+    /// ```javascript
+    /// // After simplification
+    /// const result = compressionHandle.simplify_step(0.9, "edge_length");
+    /// viewer.update_mesh("my-mesh", result.vertices, result.faces);
+    /// ```
+    #[wasm_bindgen]
+    pub fn update_mesh(
+        &mut self,
+        mesh_id: &str,
+        vertices: Vec<f32>,
+        faces: Vec<u32>,
+    ) -> Result<(), JsValue> {
+        log::info!("Updating mesh: {}", mesh_id);
+        log::debug!("New mesh data: {} vertices, {} faces", vertices.len() / 3, faces.len() / 3);
+        
+        // Create a new mesh from raw data
+        let mut mesh = polylab_core::mesh::Mesh::new();
+        
+        // Add vertices
+        for i in 0..vertices.len() / 3 {
+            mesh.vertices.push(polylab_core::mesh::Vertex {
+                position: glam::Vec3::new(
+                    vertices[i * 3],
+                    vertices[i * 3 + 1],
+                    vertices[i * 3 + 2],
+                ),
+                normal: None,
+                tex_coords: None,
+                color: None,
+            });
+        }
+        
+        // Add faces
+        for i in 0..faces.len() / 3 {
+            mesh.faces.push(polylab_core::mesh::Face {
+                vertices: [
+                    faces[i * 3] as usize,
+                    faces[i * 3 + 1] as usize,
+                    faces[i * 3 + 2] as usize,
+                ],
+            });
+        }
+        
+        // Calculate normals
+        mesh.calculate_smooth_normals();
+        
+        // Update the mesh in the renderer
+        self.renderer.add_mesh(mesh_id.to_string(), mesh);
+        
+        log::info!("Mesh '{}' updated successfully", mesh_id);
+        Ok(())
     }
 }
 

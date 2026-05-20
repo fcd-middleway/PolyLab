@@ -46,14 +46,15 @@ export class PerlinProject extends BaseProject {
             name: 'Perlin Terrain',
             icon: '🏔️',
             
-            genericMenuCallbacks: {
-                file: {
-                    onLoadMesh: () => this.openFilePicker()
-                },
-                view: {
-                    // Camera controls not implemented yet
+            fileCallbacks: {
+                onLoad: (content: string, filename: string) => this.onMeshFileLoaded(content, filename),
+                onError: (error: Error) => {
+                    appLogger.error('[PerlinProject] Failed to load mesh', error);
+                    this.statusBar?.updateStats({ status: `❌ Error: ${error.message}` });
                 }
             },
+            
+            // NOTE: viewCallbacks are now configured globally in UIManager.setViewer(),
 
             toolbarActions: [
                 {

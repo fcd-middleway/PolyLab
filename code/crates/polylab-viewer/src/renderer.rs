@@ -4,6 +4,7 @@
 //! WebGPU initialization is delegated to `webgpu_context`.
 
 use wgpu;
+use wgpu::util::DeviceExt;
 use crate::constants;
 use crate::webgpu_context::WebGpuContext;
 use crate::mesh_gpu::MeshGPU;
@@ -15,6 +16,34 @@ use glam::{Vec3, Mat4};
 // Desktop-specific imports
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
+
+/// Render mode flags (can be combined)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RenderModeFlags {
+    pub solid: bool,
+    pub wireframe: bool,
+    pub vertices: bool,
+}
+
+impl RenderModeFlags {
+    /// Default mode: solid only
+    pub fn solid_only() -> Self {
+        Self {
+            solid: true,
+            wireframe: false,
+            vertices: false,
+        }
+    }
+    
+    /// All modes enabled
+    pub fn all() -> Self {
+        Self {
+            solid: true,
+            wireframe: true,
+            vertices: true,
+        }
+    }
+}
 
 /// A single mesh entry in the scene
 struct MeshEntry {
@@ -363,13 +392,235 @@ impl Renderer {
         Ok(())
     }
 
+    /// Render with multiple passes (solid, wireframe, vertices)
+    pub fn render_multi_pass(
+        &mut self,
+        solid_pipeline: &wgpu::RenderPipeline,
+        wireframe_pipeline: &wgpu::RenderPipeline,
+        vertices_pipeline: &wgpu::RenderPipeline,
+        modes: &RenderModeFlags,
+    ) -> Result<(), String> {
+        // Update view-projection matrix uniform
+        let view_proj_matrix = self.camera.view_projection_matrix(self.aspect_ratio);
+        let matrix_data: &[f32; 16] = view_proj_matrix.as_ref();
+        self.context.queue.write_buffer(
+            &self.view_uniform_buffer,
+            0,
+            bytemuck::cast_slice(matrix_data),
+        );
+        
+        // Acquire next frame from swapchain
+        let output = match self.context.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                return Ok(()); // Skip frame if surface unavailable
+            }
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                return Err("Surface lost - call resize()".to_string());
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                return Err("Surface validation error".to_string());
+            }
+        };
+
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self.context.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Multi-Pass Render Encoder"),
+        });
+
+        // If no render modes are active, just clear the screen to white
+        if !modes.solid && !modes.wireframe && !modes.vertices {
+            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Clear Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(constants::CLEAR_COLOR),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.context.depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+            // Render pass drops here, automatically ending it
+        }
+
+        // Pass 1: Solid rendering
+        if modes.solid {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Solid Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(constants::CLEAR_COLOR),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.context.depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+
+            render_pass.set_pipeline(solid_pipeline);
+            render_pass.set_bind_group(0, &self.view_bind_group, &[]);
+            
+            for entry in self.meshes.values().filter(|e| e.visible) {
+                render_pass.set_vertex_buffer(0, entry.gpu_mesh.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(entry.gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..entry.gpu_mesh.index_count, 0, 0..1);
+            }
+        }
+
+        // Pass 2: Wireframe rendering
+        if modes.wireframe {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Wireframe Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: if modes.solid { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(constants::CLEAR_COLOR) },
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.context.depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: if modes.solid { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(1.0) },
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+
+            render_pass.set_pipeline(wireframe_pipeline);
+            render_pass.set_bind_group(0, &self.view_bind_group, &[]);
+            
+            // Draw edges for each mesh
+            for entry in self.meshes.values().filter(|e| e.visible) {
+                // Extract edges from faces - each triangle has 3 edges
+                let edges = self.extract_edges(&entry.cpu_mesh);
+                if !edges.is_empty() {
+                    // Create temporary edge buffer
+                    let edge_buffer = self.context.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Wireframe Edge Buffer"),
+                        contents: bytemuck::cast_slice(&edges),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+                    
+                    render_pass.set_vertex_buffer(0, edge_buffer.slice(..));
+                    render_pass.draw(0..(edges.len() as u32), 0..1);
+                }
+            }
+        }
+
+        // Pass 3: Vertices rendering
+        if modes.vertices {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Vertices Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: if modes.solid || modes.wireframe { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(constants::CLEAR_COLOR) },
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.context.depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: if modes.solid || modes.wireframe { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(1.0) },
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+
+            render_pass.set_pipeline(vertices_pipeline);
+            render_pass.set_bind_group(0, &self.view_bind_group, &[]);
+            
+            // Draw vertices for each mesh
+            for entry in self.meshes.values().filter(|e| e.visible) {
+                // Extract positions only
+                let positions: Vec<[f32; 3]> = entry.cpu_mesh.vertices.iter()
+                    .map(|v| [v.position.x, v.position.y, v.position.z])
+                    .collect();
+                
+                if !positions.is_empty() {
+                    let vertex_buffer = self.context.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Vertices Point Buffer"),
+                        contents: bytemuck::cast_slice(&positions),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+                    
+                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    render_pass.draw(0..(positions.len() as u32), 0..1);
+                }
+            }
+        }
+
+        // Submit commands
+        self.context.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
+    }
+
+    /// Extract edges from mesh faces for wireframe rendering
+    fn extract_edges(&self, mesh: &polylab_core::Mesh) -> Vec<[f32; 3]> {
+        let mut edges = Vec::new();
+        
+        for face in &mesh.faces {
+            let len = face.vertices.len();
+            for i in 0..len {
+                let v1 = &mesh.vertices[face.vertices[i]];
+                let v2 = &mesh.vertices[face.vertices[(i + 1) % len]];
+                
+                // Add edge as two vertices (start, end)
+                edges.push([v1.position.x, v1.position.y, v1.position.z]);
+                edges.push([v2.position.x, v2.position.y, v2.position.z]);
+            }
+        }
+        
+        edges
+    }
+
     /// Resize the surface (e.g., when browser window changes)
     pub fn resize(&mut self, new_width: u32, new_height: u32) {
         self.context.resize(new_width, new_height);
         
         // Update aspect ratio
         self.aspect_ratio = new_width as f32 / new_height as f32;
-        
         // View-projection matrix will be updated on next render() call
     }
     

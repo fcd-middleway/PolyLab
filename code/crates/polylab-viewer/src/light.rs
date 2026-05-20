@@ -57,8 +57,8 @@ impl DirectionalLight {
         Self::new(
             Vec3::new(-0.3, -1.0, -0.5), // Pointing down-left-forward
             Vec3::new(1.0, 0.98, 0.95),   // Warm white sunlight
-            1.0,                           // Full intensity
-            0.30,                          // 30% ambient (prevents pure black shadows)
+            0.8,                           // 80% intensity (less harsh)
+            0.55,                          // 55% ambient (softer shadows)
         )
     }
 }

@@ -19,6 +19,15 @@ export class CompressionProject extends BaseProject {
     
     private currentMeshId: string | null = null;
     private isCompressed: boolean = false;
+    private compressionHandle: any = null; // CompressionHandle from WASM
+    private currentMetric: string = 'edge_length'; // Default metric
+    
+    // Render modes
+    private renderModes = {
+        solid: true,
+        wireframe: false,
+        vertices: false
+    };
 
     getId(): string {
         return 'compression';
@@ -33,27 +42,26 @@ export class CompressionProject extends BaseProject {
             name: 'Mesh Compression',
             icon: '📦',
             
-            genericMenuCallbacks: {
-                file: {
-                    onLoadMesh: () => this.openFilePicker()
-                },
-                view: {
-                    // Camera controls not implemented yet
-                }
+            fileCallbacks: {
+                onLoad: (content: string, filename: string) => this.loadMesh(content, filename),
+                onError: (error: Error) => this.handleLoadError(error)
             },
+
+            // NOTE: viewCallbacks are now configured globally in UIManager.setViewer()
+            // No need to configure them per-project anymore!
 
             toolbarActions: [
                 {
-                    id: 'compress-mesh',
+                    id: 'simplify-mesh',
                     icon: '⚡',
-                    tooltip: 'Compress Mesh',
+                    tooltip: 'Simplify Mesh',
                     action: () => this.compressMesh()
                 },
                 {
-                    id: 'decompress-mesh',
-                    icon: '📦',
-                    tooltip: 'Decompress Mesh',
-                    action: () => this.decompressMesh()
+                    id: 'reset-mesh',
+                    icon: '🔄',
+                    tooltip: 'Reset Mesh',
+                    action: () => this.resetMesh()
                 }
             ],
 
@@ -154,45 +162,221 @@ export class CompressionProject extends BaseProject {
     }
 
     /**
-     * Compress the current mesh
-     * TODO: Implement actual compression logic
+     * Simplify the current mesh using edge collapse
      */
-    private compressMesh(): void {
-        if (!this.currentMeshId) {
+    private async compressMesh(): Promise<void> {
+        if (!this.currentMeshId || !this.compressionHandle) {
             appLogger.warn('No mesh loaded to compress');
             this.statusBar?.updateStats({ status: '⚠️ Load a mesh first' });
             return;
         }
 
-        appLogger.info('Compressing mesh...', { meshId: this.currentMeshId });
+        try {
+            appLogger.info('Simplifying mesh...', { meshId: this.currentMeshId, metric: this.currentMetric });
+            this.statusBar?.updateStats({ status: '⚡ Simplifying...' });
+            
+            // Simplify by 10% (keep 90% of vertices)
+            const result = this.compressionHandle.simplify_step(0.9, this.currentMetric);
+            
+            // Convert arrays to TypedArrays
+            const verticesArray = new Float32Array(result.vertices);
+            const facesArray = new Uint32Array(result.faces);
+            
+            // Update viewer with new geometry
+            this.viewer.update_mesh(
+                this.currentMeshId,
+                verticesArray,
+                facesArray
+            );
+            
+            // Update UI with new stats
+            this.displayStats(result.stats);
+            
+            // Update status bar
+            const reduction = result.stats.original_vertices - result.stats.vertices;
+            this.statusBar?.updateStats({ 
+                status: `⚡ Simplified: -${reduction} vertices`,
+                vertices: result.stats.vertices,
+                triangles: result.stats.faces
+            });
+            
+            appLogger.info('Mesh simplified successfully', { 
+                vertices: result.stats.vertices,
+                reduction 
+            });
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            appLogger.error('Failed to simplify mesh', { error: errorMsg });
+            this.statusBar?.updateStats({ status: `❌ ${errorMsg}` });
+        }
+    }
+
+    /**
+     * Reset the mesh to its original state
+     */
+    private async resetMesh(): Promise<void> {
+        if (!this.currentMeshId || !this.compressionHandle) {
+            appLogger.warn('No mesh to reset');
+            this.statusBar?.updateStats({ status: '⚠️ Load a mesh first' });
+            return;
+        }
+
+        try {
+            appLogger.info('Resetting mesh...', { meshId: this.currentMeshId });
+            this.statusBar?.updateStats({ status: '🔄 Resetting...' });
+            
+            // Reset to original mesh
+            const result = this.compressionHandle.reset();
+            
+            // Convert arrays to TypedArrays
+            const verticesArray = new Float32Array(result.vertices);
+            const facesArray = new Uint32Array(result.faces);
+            
+            // Update viewer with original geometry
+            this.viewer.update_mesh(
+                this.currentMeshId,
+                verticesArray,
+                facesArray
+            );
+            
+            // Update UI with original stats
+            this.displayStats(result.stats);
+            
+            // Update status bar
+            this.statusBar?.updateStats({ 
+                status: '🔄 Mesh reset to original',
+                vertices: result.stats.vertices,
+                triangles: result.stats.faces
+            });
+            
+            appLogger.info('Mesh reset successfully', { 
+                vertices: result.stats.vertices
+            });
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            appLogger.error('Failed to reset mesh', { error: errorMsg });
+            this.statusBar?.updateStats({ status: `❌ ${errorMsg}` });
+        }
+    }
+
+    /**
+     * Display compression statistics in the properties panel
+     */
+    private displayStats(stats: any): void {
+        if (!this.detailsPanel) return;
+
+        const compressionPercent = ((1 - stats.compression_ratio) * 100).toFixed(1);
         
-        // TODO: Call compression algorithm
-        // For now, just update status
-        this.isCompressed = true;
-        this.statusBar?.updateStats({ status: '⚡ Mesh compressed (placeholder)' });
+        const statsHTML = `
+            <div class="compression-stats">
+                <div class="stats-section">
+                    <h5>Original</h5>
+                    <div class="stats-row">
+                        <span>Vertices:</span>
+                        <span>${stats.original_vertices.toLocaleString()}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span>Faces:</span>
+                        <span>${stats.original_faces.toLocaleString()}</span>
+                    </div>
+                </div>
+                
+                <div class="stats-section">
+                    <h5>Current</h5>
+                    <div class="stats-row">
+                        <span>Vertices:</span>
+                        <span>${stats.vertices.toLocaleString()}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span>Faces:</span>
+                        <span>${stats.faces.toLocaleString()}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span>Edges:</span>
+                        <span>${stats.edges.toLocaleString()}</span>
+                    </div>
+                </div>
+                
+                <div class="stats-section">
+                    <h5>Compression</h5>
+                    <div class="stats-row">
+                        <span>Reduction:</span>
+                        <span>${compressionPercent}%</span>
+                    </div>
+                    <div class="stats-row">
+                        <span>Collapsed Edges:</span>
+                        <span>${stats.collapsed_edges.toLocaleString()}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span>Metric:</span>
+                        <span>${stats.metric_name}</span>
+                    </div>
+                </div>
+            </div>
+        `;
         
-        appLogger.info('Mesh compression complete (placeholder)');
+        this.detailsPanel.setSettingsContent(statsHTML);
     }
 
     /**
      * Decompress the current mesh
-     * TODO: Implement actual decompression logic
+     * TODO: Implement actual decompression logic (Sprint 3+)
      */
     private decompressMesh(): void {
-        if (!this.isCompressed) {
-            appLogger.warn('No compressed mesh to decompress');
-            this.statusBar?.updateStats({ status: '⚠️ Compress a mesh first' });
-            return;
-        }
+        appLogger.warn('Decompression not implemented yet');
+        this.statusBar?.updateStats({ status: '⚠️ Decompression coming in future update' });
+    }
 
-        appLogger.info('Decompressing mesh...', { meshId: this.currentMeshId });
+    /**
+     * Load mesh from content (called by FILE section callback)
+     */
+    private async loadMesh(content: string, filename: string): Promise<void> {
+        // Reuse existing implementation from onMeshFileLoaded
+        await this.onMeshFileLoaded(content, filename);
+    }
+
+    /**
+     * Handle file load error (called by FILE section callback)
+     */
+    private handleLoadError(error: Error): void {
+        const message = error.message || 'Unknown error loading mesh';
+        appLogger.error('[CompressionProject] Failed to load mesh', error);
+        this.statusBar?.updateStats({ status: `❌ Error: ${message}` });
+    }
+
+    /**
+     * Toggle a render mode (solid, wireframe, vertices)
+     * NOTE: This is now deprecated - render mode changes are handled by toolbar callbacks
+     */
+    private toggleRenderMode(mode: 'solid' | 'wireframe' | 'vertices'): void {
+        this.renderModes[mode] = !this.renderModes[mode];
         
-        // TODO: Call decompression algorithm
-        // For now, just update status
-        this.isCompressed = false;
-        this.statusBar?.updateStats({ status: '📦 Mesh decompressed (placeholder)' });
+        // Update viewer render modes
+        if (this.viewer) {
+            this.viewer.set_render_modes(
+                this.renderModes.solid,
+                this.renderModes.wireframe,
+                this.renderModes.vertices
+            );
+        }
         
-        appLogger.info('Mesh decompression complete (placeholder)');
+        appLogger.info('Render mode toggled', { mode, enabled: this.renderModes[mode] });
+        this.statusBar?.updateStats({ 
+            status: `${mode} mode ${this.renderModes[mode] ? 'enabled' : 'disabled'}` 
+        });
+        
+        // Update menu labels (would need UI manager support - for now just log)
+        this.updateViewMenuLabels();
+    }
+
+    /**
+     * Update View menu labels based on current render modes
+     * TODO: Implement proper menu item update in UI manager
+     */
+    private updateViewMenuLabels(): void {
+        // This would need to be implemented in the UI manager
+        // For now, the menu labels are static
+        appLogger.debug('View menu labels need updating', this.renderModes);
     }
 
     /**
@@ -219,6 +403,23 @@ export class CompressionProject extends BaseProject {
             const details = this.viewer.mesh_details(this.currentMeshId);
             const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
             
+            // Create compression handle
+            // First, we need to extract raw vertex and face data
+            // Parse OBJ to get raw data (we'll need to add a helper method)
+            const meshData = this.parseOBJForCompression(content);
+            
+            this.compressionHandle = this.viewer.create_compression_handle(
+                this.currentMeshId,
+                meshData.vertices,
+                meshData.faces
+            );
+            
+            appLogger.info('[CompressionProject] Compression handle created', { 
+                meshId: this.currentMeshId,
+                vertices: meshData.vertices.length / 3,
+                faces: meshData.faces.length / 3
+            });
+            
             // Add mesh to MeshPanel
             this.meshPanel?.addMesh({
                 id: this.currentMeshId,
@@ -228,24 +429,27 @@ export class CompressionProject extends BaseProject {
                 visible: true
             });
             
-            // Update DetailsPanel with dimensions
-            this.detailsPanel?.updateDetails({
-                vertices: Math.round(vertices),
-                triangles: Math.round(triangles),
-                sizeX,
-                sizeY,
-                sizeZ
-            });
+            // Get initial stats from compression handle
+            const stats = this.compressionHandle.get_stats();
+            this.displayStats(stats);
             
             // Update status bar
             this.statusBar?.updateStats({ 
-                status: `✅ Loaded ${filename} - Ready to compress`,
+                status: `✅ Loaded ${filename} - Ready to simplify`,
                 vertices: Math.round(vertices),
                 triangles: Math.round(triangles)
             });
             
             // Reset compression state
             this.isCompressed = false;
+            
+            // Initialize render modes (solid only by default)
+            appLogger.info('[CompressionProject] Initializing render modes', this.renderModes);
+            this.viewer.set_render_modes(
+                this.renderModes.solid,
+                this.renderModes.wireframe,
+                this.renderModes.vertices
+            );
             
             appLogger.info('[CompressionProject] Mesh loaded successfully', { 
                 meshId: this.currentMeshId,
@@ -258,5 +462,54 @@ export class CompressionProject extends BaseProject {
             appLogger.error('[CompressionProject] Failed to load mesh', { filename, error: errorMsg });
             this.statusBar?.updateStats({ status: `❌ ${errorMsg}` });
         }
+    }
+
+    /**
+     * Parse OBJ file to extract raw vertex and face data for compression
+     */
+    private parseOBJForCompression(content: string): { vertices: Float32Array, faces: Uint32Array } {
+        const lines = content.split('\n');
+        const vertices: number[] = [];
+        const faces: number[] = [];
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            
+            // Vertex position
+            if (trimmed.startsWith('v ')) {
+                const parts = trimmed.split(/\s+/);
+                vertices.push(
+                    parseFloat(parts[1]),
+                    parseFloat(parts[2]),
+                    parseFloat(parts[3])
+                );
+            }
+            // Face (triangular only for now)
+            else if (trimmed.startsWith('f ')) {
+                const parts = trimmed.split(/\s+/);
+                if (parts.length === 4) { // Triangle
+                    for (let i = 1; i <= 3; i++) {
+                        // Handle "v/vt/vn" or "v//vn" or just "v"
+                        const vertexIndex = parseInt(parts[i].split('/')[0]) - 1; // OBJ indices are 1-based
+                        faces.push(vertexIndex);
+                    }
+                } else if (parts.length === 5) { // Quad - triangulate
+                    // Split quad into two triangles: (0,1,2) and (0,2,3)
+                    const indices = [
+                        parseInt(parts[1].split('/')[0]) - 1,
+                        parseInt(parts[2].split('/')[0]) - 1,
+                        parseInt(parts[3].split('/')[0]) - 1,
+                        parseInt(parts[4].split('/')[0]) - 1
+                    ];
+                    faces.push(indices[0], indices[1], indices[2]);
+                    faces.push(indices[0], indices[2], indices[3]);
+                }
+            }
+        }
+
+        return {
+            vertices: new Float32Array(vertices),
+            faces: new Uint32Array(faces)
+        };
     }
 }

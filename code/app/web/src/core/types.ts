@@ -46,7 +46,25 @@ export interface DropZoneConfig {
 }
 
 /**
- * Callbacks for generic menus (File, View)
+ * Callbacks for toolbar FILE section
+ */
+export interface FileCallbacks {
+    onLoad: (content: string, filename: string) => void;
+    onError?: (error: Error) => void;
+    onExport?: () => void;
+}
+
+/**
+ * Callbacks for toolbar VIEW section
+ */
+export interface ViewCallbacks {
+    onResetCamera?: () => void;
+    onCenterMesh?: () => void;
+    onRenderModeChange?: (modes: { solid: boolean; wireframe: boolean; vertices: boolean }) => void;
+}
+
+/**
+ * Callbacks for generic menus (File, View) - DEPRECATED, use FileCallbacks/ViewCallbacks instead
  */
 export interface GenericMenuCallbacks {
     file?: {
@@ -56,6 +74,9 @@ export interface GenericMenuCallbacks {
     view?: {
         onResetCamera?: () => void;
         onCenterMesh?: () => void;
+        onToggleSolid?: () => void;
+        onToggleWireframe?: () => void;
+        onToggleVertices?: () => void;
     };
 }
 
@@ -65,10 +86,12 @@ export interface GenericMenuCallbacks {
 export interface ProjectConfig {
     name: string;
     icon: string;
-    genericMenuCallbacks?: GenericMenuCallbacks; // Callbacks for File and View menus
-    menuItems?: MenuItem[]; // DEPRECATED: Use genericMenuCallbacks instead
-    toolbarActions: ToolbarAction[];
+    fileCallbacks?: FileCallbacks; // FILE section callbacks
+    viewCallbacks?: ViewCallbacks; // VIEW section callbacks
+    genericMenuCallbacks?: GenericMenuCallbacks; // DEPRECATED: Use fileCallbacks/viewCallbacks instead
+    menuItems?: MenuItem[]; // DEPRECATED: Use fileCallbacks/viewCallbacks instead
+    toolbarActions: ToolbarAction[]; // MODE section actions
     layoutActions?: ToolbarAction[]; // Layout/view mode buttons (right side)
     panels: PanelDefinition[];
-    dropZone?: DropZoneConfig; // Optional drag & drop zone
+    dropZone?: DropZoneConfig; // DEPRECATED: Use fileCallbacks instead
 }

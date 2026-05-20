@@ -9,7 +9,7 @@ import { BaseProject } from '../core/BaseProject';
 import type { ProjectConfig } from '../core/types';
 import type { StatusBar } from '../components/StatusBar';
 import type { PropertiesPanel } from '../components/PropertiesPanel';
-import type { MeshPanel } from '../components/MeshPanel';
+import type { ScenePanel } from '../components/ScenePanel';
 import { appLogger } from '../utils/logger';
 
 type ViewMode = 'scene' | 'stereo' | 'depth' | 'full-grid' | 'point-cloud';
@@ -17,7 +17,7 @@ type ViewMode = 'scene' | 'stereo' | 'depth' | 'full-grid' | 'point-cloud';
 export class RoverProject extends BaseProject {
     private statusBar: StatusBar | null = null;
     private detailsPanel: PropertiesPanel | null = null;
-    private meshPanel: MeshPanel | null = null;
+    private scenePanel: ScenePanel | null = null;
     
     // Current view mode
     private currentViewMode: ViewMode = 'scene';
@@ -129,8 +129,8 @@ export class RoverProject extends BaseProject {
     /**
      * Set UI components (called by main.ts after project creation)
      */
-    setUIComponents(meshPanel: MeshPanel, statusBar: StatusBar, detailsPanel: PropertiesPanel): void {
-        this.meshPanel = meshPanel;
+    setUIComponents(scenePanel: ScenePanel, statusBar: StatusBar, detailsPanel: PropertiesPanel): void {
+        this.scenePanel = scenePanel;
         this.statusBar = statusBar;
         this.detailsPanel = detailsPanel;
     }
@@ -146,8 +146,8 @@ export class RoverProject extends BaseProject {
         }
         
         // Set up visibility toggle callback
-        if (this.meshPanel) {
-            this.meshPanel.setVisibilityCallback((id: string, visible: boolean) => {
+        if (this.scenePanel) {
+            this.scenePanel.setVisibilityCallback((id: string, visible: boolean) => {
                 viewer.set_mesh_visibility(id, visible);
             });
         }
@@ -665,13 +665,13 @@ export class RoverProject extends BaseProject {
             appLogger.debug('Target cube loaded at z=+10');
             
             // Add meshes to panel
-            if (this.meshPanel) {
+            if (this.scenePanel) {
                 // Get details for each mesh
                 const planeDetails = this.viewer.mesh_details('ground-plane');
                 const wallyDetails = this.viewer.mesh_details('rover-wally');
                 const cubeDetails = this.viewer.mesh_details('target-cube');
                 
-                this.meshPanel.addMesh({
+                this.scenePanel.addMesh({
                     id: 'ground-plane',
                     name: 'Ground Plane',
                     vertices: Math.round(planeDetails[0]),
@@ -679,7 +679,7 @@ export class RoverProject extends BaseProject {
                     visible: true
                 });
                 
-                this.meshPanel.addMesh({
+                this.scenePanel.addMesh({
                     id: 'rover-wally',
                     name: 'Wall-E Rover',
                     vertices: Math.round(wallyDetails[0]),
@@ -687,7 +687,7 @@ export class RoverProject extends BaseProject {
                     visible: true
                 });
                 
-                this.meshPanel.addMesh({
+                this.scenePanel.addMesh({
                     id: 'target-cube',
                     name: 'Target Cube',
                     vertices: Math.round(cubeDetails[0]),
@@ -795,7 +795,7 @@ export class RoverProject extends BaseProject {
                 const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
                 
                 // Add mesh to MeshPanel
-                this.meshPanel?.addMesh({
+                this.scenePanel?.addMesh({
                     id: meshId,
                     name: filename,
                     vertices: Math.round(vertices),

@@ -9,14 +9,14 @@ import { BaseProject } from '../core/BaseProject';
 import type { ProjectConfig } from '../core/types';
 import type { StatusBar } from '../components/StatusBar';
 import type { PropertiesPanel } from '../components/PropertiesPanel';
-import type { MeshPanel } from '../components/MeshPanel';
+import type { ScenePanel } from '../components/ScenePanel';
 import { PerlinControlPanel, type TerrainParams } from '../components/PerlinControlPanel';
 import { appLogger, meshLogger } from '../utils/logger';
 
 export class PerlinProject extends BaseProject {
     private statusBar: StatusBar | null = null;
     private detailsPanel: PropertiesPanel | null = null;
-    private meshPanel: MeshPanel | null = null;
+    private scenePanel: ScenePanel | null = null;
     private controlPanel: PerlinControlPanel | null = null;
     private controlPanelContent: HTMLElement | null = null; // Keep reference to injected content
     private currentTerrainId: string | null = null;
@@ -94,8 +94,8 @@ export class PerlinProject extends BaseProject {
     /**
      * Set UI components (called by main.ts after project creation)
      */
-    setUIComponents(meshPanel: MeshPanel, statusBar: StatusBar, detailsPanel: PropertiesPanel): void {
-        this.meshPanel = meshPanel;
+    setUIComponents(scenePanel: ScenePanel, statusBar: StatusBar, detailsPanel: PropertiesPanel): void {
+        this.scenePanel = scenePanel;
         this.statusBar = statusBar;
         this.detailsPanel = detailsPanel;
         
@@ -123,8 +123,8 @@ export class PerlinProject extends BaseProject {
         this.viewer = viewer;
         
         // Set up visibility toggle callback
-        if (this.meshPanel) {
-            this.meshPanel.setVisibilityCallback((id: string, visible: boolean) => {
+        if (this.scenePanel) {
+            this.scenePanel.setVisibilityCallback((id: string, visible: boolean) => {
                 viewer.set_mesh_visibility(id, visible);
                 meshLogger.debug('Mesh visibility changed', { meshId: id, visible });
             });
@@ -146,8 +146,8 @@ export class PerlinProject extends BaseProject {
         if (this.currentTerrainId && this.viewer) {
             this.viewer.remove_mesh(this.currentTerrainId);
             
-            if (this.meshPanel) {
-                this.meshPanel.removeMesh(this.currentTerrainId);
+            if (this.scenePanel) {
+                this.scenePanel.removeMesh(this.currentTerrainId);
             }
             
             this.currentTerrainId = null;
@@ -202,8 +202,8 @@ export class PerlinProject extends BaseProject {
             // Remove old terrain if exists
             if (this.currentTerrainId) {
                 this.viewer.remove_mesh(this.currentTerrainId);
-                if (this.meshPanel) {
-                    this.meshPanel.removeMesh(this.currentTerrainId);
+                if (this.scenePanel) {
+                    this.scenePanel.removeMesh(this.currentTerrainId);
                 }
             }
 
@@ -228,8 +228,8 @@ export class PerlinProject extends BaseProject {
             const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
 
             // Add mesh to MeshPanel
-            if (this.meshPanel) {
-                this.meshPanel.addMesh({
+            if (this.scenePanel) {
+                this.scenePanel.addMesh({
                     id: this.currentTerrainId,
                     name: `Terrain (seed: ${this.params.seed})`,
                     vertices: Math.round(vertices),
@@ -286,8 +286,8 @@ export class PerlinProject extends BaseProject {
 
         this.viewer.remove_mesh(this.currentTerrainId);
         
-        if (this.meshPanel) {
-            this.meshPanel.removeMesh(this.currentTerrainId);
+        if (this.scenePanel) {
+            this.scenePanel.removeMesh(this.currentTerrainId);
         }
         
         this.currentTerrainId = null;
@@ -338,7 +338,7 @@ export class PerlinProject extends BaseProject {
             const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
             
             // Add mesh to MeshPanel
-            this.meshPanel?.addMesh({
+            this.scenePanel?.addMesh({
                 id: meshId,
                 name: filename,
                 vertices: Math.round(vertices),

@@ -1,7 +1,7 @@
 // PolyLab Web App Entry Point
 import { Header } from './components/Header';
 import { Toolbar } from './components/Toolbar';
-import { MeshPanel } from './components/MeshPanel';
+import { ScenePanel } from './components/ScenePanel';
 import { PropertiesPanel } from './components/PropertiesPanel';
 import { StatusBar } from './components/StatusBar';
 import { ViewerCanvas } from './components/ViewerCanvas';
@@ -33,7 +33,7 @@ function initializeUI() {
     // Create components
     const header = new Header();
     const toolbar = new Toolbar();
-    const meshPanel = new MeshPanel();
+    const scenePanel = new ScenePanel();
     const viewerCanvas = new ViewerCanvas();
     const detailsPanel = new PropertiesPanel();
     const statusBar = new StatusBar();
@@ -43,7 +43,7 @@ function initializeUI() {
     mainContent.className = 'main-content';
     mainContent.id = 'main-content';
     
-    mainContent.appendChild(meshPanel.element);
+    mainContent.appendChild(scenePanel.element);
     mainContent.appendChild(viewerCanvas.element);
     mainContent.appendChild(detailsPanel.element);
 
@@ -57,7 +57,7 @@ function initializeUI() {
     return {
         header,
         toolbar,
-        meshPanel,
+        scenePanel,
         viewerCanvas,
         detailsPanel,
         statusBar
@@ -156,7 +156,7 @@ async function main() {
         projectManager.setViewer(viewer);
 
         // Create UIManager with panel references
-        const uiManager = new UIManager(ui.toolbar, ui.meshPanel, ui.detailsPanel);
+        const uiManager = new UIManager(ui.toolbar, ui.scenePanel, ui.detailsPanel);
         
         // Set viewer in UIManager to configure common VIEW section callbacks
         uiManager.setViewer(viewer);
@@ -166,7 +166,7 @@ async function main() {
         const viewerProject = new ViewerProject();
         
         // Inject UI components into ViewerProject
-        viewerProject.setUIComponents(ui.meshPanel, ui.detailsPanel, ui.statusBar);
+        viewerProject.setUIComponents(ui.scenePanel, ui.detailsPanel, ui.statusBar);
         
         // Initialize ViewerProject with viewer
         await viewerProject.init(viewer);
@@ -179,7 +179,7 @@ async function main() {
         const perlinProject = new PerlinProject();
         
         // Inject UI components into PerlinProject
-        perlinProject.setUIComponents(ui.meshPanel, ui.statusBar, ui.detailsPanel);
+        perlinProject.setUIComponents(ui.scenePanel, ui.statusBar, ui.detailsPanel);
         
         // Register PerlinProject (will be initialized when activated)
         projectManager.registerProject(perlinProject);
@@ -189,7 +189,7 @@ async function main() {
         const roverProject = new RoverProject();
         
         // Inject UI components into RoverProject
-        roverProject.setUIComponents(ui.meshPanel, ui.statusBar, ui.detailsPanel);
+        roverProject.setUIComponents(ui.scenePanel, ui.statusBar, ui.detailsPanel);
         
         // Register RoverProject (will be initialized when activated)
         projectManager.registerProject(roverProject);
@@ -199,7 +199,7 @@ async function main() {
         const compressionProject = new CompressionProject();
         
         // Inject UI components into CompressionProject
-        compressionProject.setUIComponents(ui.meshPanel, ui.detailsPanel, ui.statusBar);
+        compressionProject.setUIComponents(ui.scenePanel, ui.detailsPanel, ui.statusBar);
         
         // Register CompressionProject (will be initialized when activated)
         projectManager.registerProject(compressionProject);

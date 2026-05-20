@@ -7,13 +7,13 @@
 
 import type { ProjectConfig, MenuItem, ToolbarAction } from './types';
 import type { Toolbar } from '../components/Toolbar';
-import type { MeshPanel } from '../components/MeshPanel';
+import type { ScenePanel } from '../components/ScenePanel';
 import type { PropertiesPanel } from '../components/PropertiesPanel';
 import { uiLogger } from '../utils/logger';
 
 export class UIManager {
     private toolbar: Toolbar;
-    private meshPanel: MeshPanel | null = null;
+    private scenePanel: ScenePanel | null = null;
     private detailsPanel: PropertiesPanel | null = null;
     private currentConfig: ProjectConfig | null = null;
     private viewer: any = null; // WASM viewer handle
@@ -120,8 +120,8 @@ export class UIManager {
      */
     private configurePanels(panelDefinitions: any[]): void {
         panelDefinitions.forEach(panelDef => {
-            if (panelDef.id === 'mesh-list' && this.meshPanel) {
-                this.meshPanel.setTitle(panelDef.title);
+            if (panelDef.id === 'mesh-list' && this.scenePanel) {
+                this.scenePanel.setTitle(panelDef.title);
                 uiLogger.debug(`Set mesh panel title to: ${panelDef.title}`);
             } else if (panelDef.id === 'mesh-details' && this.detailsPanel) {
                 this.detailsPanel.setTitle(panelDef.title);

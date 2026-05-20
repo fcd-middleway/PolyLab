@@ -7,13 +7,13 @@
 
 import { BaseProject } from '../core/BaseProject';
 import type { ProjectConfig } from '../core/types';
-import type { MeshPanel } from '../components/MeshPanel';
+import type { ScenePanel } from '../components/ScenePanel';
 import type { PropertiesPanel } from '../components/PropertiesPanel';
 import type { StatusBar } from '../components/StatusBar';
 import { appLogger, meshLogger } from '../utils/logger';
 
 export class CompressionProject extends BaseProject {
-    private meshPanel: MeshPanel | null = null;
+    private scenePanel: ScenePanel | null = null;
     private detailsPanel: PropertiesPanel | null = null;
     private statusBar: StatusBar | null = null;
     
@@ -94,8 +94,8 @@ export class CompressionProject extends BaseProject {
     /**
      * Set UI components (called by main.ts after project creation)
      */
-    setUIComponents(meshPanel: MeshPanel, detailsPanel: PropertiesPanel, statusBar: StatusBar): void {
-        this.meshPanel = meshPanel;
+    setUIComponents(scenePanel: ScenePanel, detailsPanel: PropertiesPanel, statusBar: StatusBar): void {
+        this.scenePanel = scenePanel;
         this.detailsPanel = detailsPanel;
         this.statusBar = statusBar;
     }
@@ -105,8 +105,8 @@ export class CompressionProject extends BaseProject {
         this.viewer = viewer;
         
         // Set up visibility toggle callback
-        if (this.meshPanel) {
-            this.meshPanel.setVisibilityCallback((id: string, visible: boolean) => {
+        if (this.scenePanel) {
+            this.scenePanel.setVisibilityCallback((id: string, visible: boolean) => {
                 viewer.set_mesh_visibility(id, visible);
                 meshLogger.debug('Mesh visibility changed', { meshId: id, visible });
             });
@@ -126,8 +126,8 @@ export class CompressionProject extends BaseProject {
         if (this.currentMeshId && this.viewer) {
             this.viewer.remove_mesh(this.currentMeshId);
             
-            if (this.meshPanel) {
-                this.meshPanel.removeMesh(this.currentMeshId);
+            if (this.scenePanel) {
+                this.scenePanel.removeMesh(this.currentMeshId);
             }
             
             this.currentMeshId = null;
@@ -390,7 +390,7 @@ export class CompressionProject extends BaseProject {
             // Remove old mesh if exists
             if (this.currentMeshId && this.viewer) {
                 this.viewer.remove_mesh(this.currentMeshId);
-                this.meshPanel?.removeMesh(this.currentMeshId);
+                this.scenePanel?.removeMesh(this.currentMeshId);
             }
             
             // Generate unique mesh ID
@@ -421,7 +421,7 @@ export class CompressionProject extends BaseProject {
             });
             
             // Add mesh to MeshPanel
-            this.meshPanel?.addMesh({
+            this.scenePanel?.addMesh({
                 id: this.currentMeshId,
                 name: filename,
                 vertices: Math.round(vertices),

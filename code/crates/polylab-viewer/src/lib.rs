@@ -602,6 +602,22 @@ impl ViewerHandle {
             .map_err(|e| JsValue::from_str(&e))
     }
     
+    /// Import scene from PolyLab Scene (.pls) format
+    ///
+    /// Loads a complete scene from a ZIP archive, replacing the current scene.
+    /// Clears all existing meshes, camera, and light before loading the new scene.
+    ///
+    /// # Arguments
+    /// * `bytes` - ZIP file bytes (Uint8Array from JavaScript)
+    ///
+    /// # Returns
+    /// Ok(()) on success, JsValue error on failure
+    #[wasm_bindgen]
+    pub fn import_scene(&mut self, bytes: Vec<u8>) -> Result<(), JsValue> {
+        self.renderer.import_scene(bytes)
+            .map_err(|e| JsValue::from_str(&e))
+    }
+    
     // ========================
     // Custom View-Projection Matrix Rendering
     // ========================

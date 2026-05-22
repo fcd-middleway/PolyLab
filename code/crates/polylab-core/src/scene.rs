@@ -153,6 +153,129 @@ impl Scene {
         Ok(buf)
     }
     
+    /// Import scene from PolyLab Scene (.pls) format
+    ///
+    /// Loads a scene from a ZIP archive containing:
+    /// - manifest.json (scene metadata)
+    /// - meshes/*.obj (mesh geometry)
+    /// - cameras/main.json (camera parameters)
+    /// - lights/directional.json (light parameters)
+    ///
+    /// # Arguments
+    /// * `bytes` - ZIP file bytes
+    ///
+    /// # Returns
+    /// A fully loaded Scene with all meshes, camera, and light
+    ///
+    /// # Errors
+    /// Returns error if ZIP is corrupted, files are missing, or parsing fails
+    pub fn import_from_pls(bytes: Vec<u8>) -> Result<Self, String> {
+        use std::io::{Read, Cursor};
+        use zip::ZipArchive;
+        
+        let cursor = Cursor::new(bytes);
+        let mut zip = ZipArchive::new(cursor)
+            .map_err(|e| format!("Failed to open ZIP: {}", e))?;
+        
+        // Read manifest.json
+        let mut manifest_file = zip.by_name("manifest.json")
+            .map_err(|e| format!("Failed to find manifest.json: {}", e))?;
+        let mut manifest_content = String::new();
+        manifest_file.read_to_string(&mut manifest_content)
+            .map_err(|e| format!("Failed to read manifest.json: {}", e))?;
+        drop(manifest_file); // Release borrow
+        
+        let manifest: serde_json::Value = serde_json::from_str(&manifest_content)
+            .map_err(|e| format!("Failed to parse manifest.json: {}", e))?;
+        
+        // Extract scene name
+        let scene_name = manifest["scene"]["name"].as_str()
+            .unwrap_or("Imported Scene")
+            .to_string();
+        
+        let mut scene = Scene::new(scene_name);
+        
+        // Load meshes
+        if let Some(meshes_array) = manifest["scene"]["meshes"].as_array() {
+            for mesh_entry in meshes_array {
+                let mesh_id = mesh_entry["id"].as_str()
+                    .ok_or("Missing mesh id")?;
+                let mesh_name = mesh_entry["name"].as_str()
+                    .unwrap_or(mesh_id);
+                let mesh_path = mesh_entry["path"].as_str()
+                    .ok_or("Missing mesh path")?;
+                
+                // Read OBJ file
+                let mut obj_file = zip.by_name(mesh_path)
+                    .map_err(|e| format!("Failed to find {}: {}", mesh_path, e))?;
+                let mut obj_content = String::new();
+                obj_file.read_to_string(&mut obj_content)
+                    .map_err(|e| format!("Failed to read {}: {}", mesh_path, e))?;
+                drop(obj_file); // Release borrow
+                
+                // Parse OBJ
+                let mesh = crate::obj_parser::parse_obj(&obj_content)
+                    .map_err(|e| format!("Failed to parse {}: {}", mesh_path, e))?;
+                
+                scene.add_mesh(mesh_id.to_string(), mesh_name.to_string(), mesh);
+            }
+        }
+        
+        // Load camera
+        let mut camera_file = zip.by_name("cameras/main.json")
+            .map_err(|e| format!("Failed to find cameras/main.json: {}", e))?;
+        let mut camera_content = String::new();
+        camera_file.read_to_string(&mut camera_content)
+            .map_err(|e| format!("Failed to read cameras/main.json: {}", e))?;
+        drop(camera_file);
+        
+        let camera_json: serde_json::Value = serde_json::from_str(&camera_content)
+            .map_err(|e| format!("Failed to parse cameras/main.json: {}", e))?;
+        
+        scene.camera = Camera {
+            position: Vec3::new(
+                camera_json["position"][0].as_f64().unwrap_or(0.0) as f32,
+                camera_json["position"][1].as_f64().unwrap_or(2.0) as f32,
+                camera_json["position"][2].as_f64().unwrap_or(5.0) as f32,
+            ),
+            target: Vec3::new(
+                camera_json["target"][0].as_f64().unwrap_or(0.0) as f32,
+                camera_json["target"][1].as_f64().unwrap_or(0.0) as f32,
+                camera_json["target"][2].as_f64().unwrap_or(0.0) as f32,
+            ),
+            fov: camera_json["fov"].as_f64().unwrap_or(45.0) as f32,
+            near: camera_json["near"].as_f64().unwrap_or(0.1) as f32,
+            far: camera_json["far"].as_f64().unwrap_or(200.0) as f32,
+        };
+        
+        // Load light
+        let mut light_file = zip.by_name("lights/directional.json")
+            .map_err(|e| format!("Failed to find lights/directional.json: {}", e))?;
+        let mut light_content = String::new();
+        light_file.read_to_string(&mut light_content)
+            .map_err(|e| format!("Failed to read lights/directional.json: {}", e))?;
+        drop(light_file);
+        
+        let light_json: serde_json::Value = serde_json::from_str(&light_content)
+            .map_err(|e| format!("Failed to parse lights/directional.json: {}", e))?;
+        
+        scene.light = Light {
+            direction: Vec3::new(
+                light_json["direction"][0].as_f64().unwrap_or(0.3) as f32,
+                light_json["direction"][1].as_f64().unwrap_or(-0.8) as f32,
+                light_json["direction"][2].as_f64().unwrap_or(-0.5) as f32,
+            ).normalize(),
+            color: Vec3::new(
+                light_json["color"][0].as_f64().unwrap_or(1.0) as f32,
+                light_json["color"][1].as_f64().unwrap_or(1.0) as f32,
+                light_json["color"][2].as_f64().unwrap_or(1.0) as f32,
+            ),
+            intensity: light_json["intensity"].as_f64().unwrap_or(1.0) as f32,
+        };
+        
+        Ok(scene)
+    }
+    
     /// Generate manifest.json content
     fn generate_manifest(&self) -> String {
         let mut manifest = String::from("{\n");

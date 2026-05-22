@@ -73,6 +73,26 @@ export class UIManager {
                 } else {
                     uiLogger.warn('[UIManager] Viewer not set yet');
                 }
+            },
+            onImport: (bytes: Uint8Array) => {
+                uiLogger.info('[UIManager] Importing scene');
+                if (this.viewer) {
+                    try {
+                        // Call WASM import_scene
+                        this.viewer.import_scene(bytes);
+                        
+                        // Refresh scene panel to show imported meshes
+                        // TODO: Update scene panel tree
+                        
+                        uiLogger.info('[UIManager] Scene imported successfully');
+                        alert('Scene imported successfully!');
+                    } catch (error) {
+                        uiLogger.error('[UIManager] Import failed', error);
+                        alert(`Import failed: ${error}`);
+                    }
+                } else {
+                    uiLogger.warn('[UIManager] Viewer not set yet');
+                }
             }
         });
         

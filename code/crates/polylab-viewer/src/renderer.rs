@@ -903,6 +903,48 @@ impl Renderer {
         // Export to PLS format
         scene.export_to_pls()
     }
+    
+    /// Import scene from PolyLab Scene (.pls) format
+    ///
+    /// Loads a complete scene from a ZIP archive, replacing the current scene.
+    /// Clears all existing meshes, camera, and light before loading the new scene.
+    ///
+    /// # Arguments
+    /// * `bytes` - ZIP file bytes containing the scene
+    ///
+    /// # Returns
+    /// Ok(()) on success
+    ///
+    /// # Errors
+    /// Returns error if import fails (corrupted ZIP, missing files, parsing errors)
+    pub fn import_scene(&mut self, bytes: Vec<u8>) -> Result<(), String> {
+        use polylab_core::Scene;
+        
+        // Parse scene from ZIP
+        let scene = Scene::import_from_pls(bytes)?;
+        
+        // Clear all existing meshes
+        self.meshes.clear();
+        
+        // Import camera settings
+        self.camera.set_position(scene.camera.position);
+        self.camera.set_orbit_target(scene.camera.target);
+        self.camera.fov = scene.camera.fov;
+        self.camera.near = scene.camera.near;
+        self.camera.far = scene.camera.far;
+        
+        // Import light settings
+        self.light.direction = scene.light.direction;
+        self.light.color = scene.light.color;
+        self.light.intensity = scene.light.intensity;
+        
+        // Import all meshes
+        for entry in scene.meshes {
+            self.add_mesh(entry.id, entry.mesh);
+        }
+        
+        Ok(())
+    }
 }
 
 // ========================

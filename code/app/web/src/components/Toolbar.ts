@@ -19,7 +19,9 @@ export class Toolbar implements UIComponent {
     // FILE section elements
     private dropZoneElement: HTMLElement | null = null;
     private exportButton: HTMLButtonElement | null = null;
+    private importButton: HTMLButtonElement | null = null;
     private fileInput: HTMLInputElement | null = null;
+    private importFileInput: HTMLInputElement | null = null;
     
     // VIEW section elements
     private resetCameraButton: HTMLButtonElement | null = null;
@@ -39,6 +41,7 @@ export class Toolbar implements UIComponent {
     private onFileLoad: ((content: string, filename: string) => void) | null = null;
     private onFileError: ((error: Error) => void) | null = null;
     private onExportScene: (() => void) | null = null;
+    private onImportScene: ((bytes: Uint8Array) => void) | null = null;
     private onResetCamera: (() => void) | null = null;
     private onCenterMesh: (() => void) | null = null;
     private onRenderModeChange: ((modes: { solid: boolean; wireframe: boolean; vertices: boolean }) => void) | null = null;
@@ -145,6 +148,44 @@ export class Toolbar implements UIComponent {
             <span class="label">Export Scene</span>
         `;
         this.fileSectionElement.appendChild(this.exportButton);
+        
+        // Create import button (disabled for now)
+        this.importButton = document.createElement('button');
+        this.importButton.className = 'toolbar-btn';
+        this.importButton.id = 'import-scene-btn';
+        this.importButton.disabled = true;
+        this.importButton.title = 'Import Scene (.pls)';
+        this.importButton.innerHTML = `
+            <span class="icon">📂</span>
+            <span class="label">Import Scene</span>
+        `;
+        this.fileSectionElement.appendChild(this.importButton);
+        
+        // Create import file input (hidden)
+        this.importFileInput = document.createElement('input');
+        this.importFileInput.type = 'file';
+        this.importFileInput.accept = '.pls';
+        this.importFileInput.style.display = 'none';
+        document.body.appendChild(this.importFileInput);
+        
+        // Click import button to open file picker
+        this.importButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.importFileInput?.click();
+        });
+        
+        // Import file input change handler
+        this.importFileInput.addEventListener('change', (e) => {
+            const target = e.target as HTMLInputElement;
+            const file = target.files?.[0];
+            if (file && this.onImportScene) {
+                file.arrayBuffer()
+                    .then(buffer => this.onImportScene!(new Uint8Array(buffer)))
+                    .catch(error => console.error('Import failed:', error));
+            }
+            // Reset input for next selection
+            target.value = '';
+        });
     }
 
     /**
@@ -305,6 +346,7 @@ export class Toolbar implements UIComponent {
         onLoad?: (content: string, filename: string) => void;
         onError?: (error: Error) => void;
         onExport?: () => void;
+        onImport?: (bytes: Uint8Array) => void;
     }): void {
         // Only update callbacks if explicitly provided (don't overwrite with undefined)
         if (callbacks.onLoad !== undefined) {
@@ -315,6 +357,9 @@ export class Toolbar implements UIComponent {
         }
         if (callbacks.onExport !== undefined) {
             this.onExportScene = callbacks.onExport;
+        }
+        if (callbacks.onImport !== undefined) {
+            this.onImportScene = callbacks.onImport;
         }
         
         // Setup drop zone with callbacks
@@ -336,6 +381,11 @@ export class Toolbar implements UIComponent {
                 e.stopPropagation();
                 this.onExportScene?.();
             });
+        }
+        
+        // Enable import button if callback provided and button exists
+        if (this.importButton && this.onImportScene) {
+            this.importButton.disabled = false;
         }
     }
 

@@ -116,7 +116,8 @@ export class Toolbar implements UIComponent {
         document.body.appendChild(this.fileInput);
 
         // Click to open file picker
-        this.dropZoneElement.addEventListener('click', () => {
+        this.dropZoneElement.addEventListener('click', (e) => {
+            e.stopPropagation();
             this.fileInput?.click();
         });
 
@@ -185,7 +186,10 @@ export class Toolbar implements UIComponent {
             <span class="icon">☑️</span>
             <span class="label">Solid</span>
         `;
-        this.solidButton.addEventListener('click', () => this.toggleRenderMode('solid'));
+        this.solidButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleRenderMode('solid');
+        });
         this.viewSectionElement.appendChild(this.solidButton);
 
         // Wireframe toggle button
@@ -197,7 +201,10 @@ export class Toolbar implements UIComponent {
             <span class="icon">☐</span>
             <span class="label">Wireframe</span>
         `;
-        this.wireframeButton.addEventListener('click', () => this.toggleRenderMode('wireframe'));
+        this.wireframeButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleRenderMode('wireframe');
+        });
         this.viewSectionElement.appendChild(this.wireframeButton);
 
         // Vertices toggle button
@@ -209,7 +216,10 @@ export class Toolbar implements UIComponent {
             <span class="icon">☐</span>
             <span class="label">Vertices</span>
         `;
-        this.verticesButton.addEventListener('click', () => this.toggleRenderMode('vertices'));
+        this.verticesButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleRenderMode('vertices');
+        });
         this.viewSectionElement.appendChild(this.verticesButton);
     }
 
@@ -277,7 +287,8 @@ export class Toolbar implements UIComponent {
                 <span class="label">${action.tooltip}</span>
             `;
 
-            button.addEventListener('click', () => {
+            button.addEventListener('click', (e) => {
+                e.stopPropagation();
                 if (!button.disabled) {
                     action.action();
                 }
@@ -291,23 +302,38 @@ export class Toolbar implements UIComponent {
      * Configure FILE section callbacks
      */
     public configureFileCallbacks(callbacks: {
-        onLoad: (content: string, filename: string) => void;
+        onLoad?: (content: string, filename: string) => void;
         onError?: (error: Error) => void;
         onExport?: () => void;
     }): void {
-        this.onFileLoad = callbacks.onLoad;
-        this.onFileError = callbacks.onError || null;
-        this.onExportScene = callbacks.onExport || null;
+        // Only update callbacks if explicitly provided (don't overwrite with undefined)
+        if (callbacks.onLoad !== undefined) {
+            this.onFileLoad = callbacks.onLoad;
+        }
+        if (callbacks.onError !== undefined) {
+            this.onFileError = callbacks.onError;
+        }
+        if (callbacks.onExport !== undefined) {
+            this.onExportScene = callbacks.onExport;
+        }
         
         // Setup drop zone with callbacks
         if (this.dropZoneElement && this.onFileLoad && this.onFileError) {
             setupDropZone(this.dropZoneElement, this.onFileLoad, this.onFileError);
         }
         
-        // Enable export button if callback provided
-        if (this.exportButton && callbacks.onExport) {
+        // Enable export button if callback provided and button exists
+        if (this.exportButton && this.onExportScene) {
             this.exportButton.disabled = false;
-            this.exportButton.addEventListener('click', () => {
+            // Remove existing listener if any to avoid duplicates
+            const oldButton = this.exportButton;
+            const newButton = oldButton.cloneNode(true) as HTMLButtonElement;
+            oldButton.parentNode?.replaceChild(newButton, oldButton);
+            this.exportButton = newButton;
+            
+            // Add new listener
+            this.exportButton.addEventListener('click', (e) => {
+                e.stopPropagation();
                 this.onExportScene?.();
             });
         }
@@ -328,7 +354,8 @@ export class Toolbar implements UIComponent {
         // Enable reset camera button if callback provided
         if (this.resetCameraButton && callbacks.onResetCamera) {
             this.resetCameraButton.disabled = false;
-            this.resetCameraButton.addEventListener('click', () => {
+            this.resetCameraButton.addEventListener('click', (e) => {
+                e.stopPropagation();
                 this.onResetCamera?.();
             });
         }
@@ -336,7 +363,8 @@ export class Toolbar implements UIComponent {
         // Enable center mesh button if callback provided
         if (this.centerMeshButton && callbacks.onCenterMesh) {
             this.centerMeshButton.disabled = false;
-            this.centerMeshButton.addEventListener('click', () => {
+            this.centerMeshButton.addEventListener('click', (e) => {
+                e.stopPropagation();
                 this.onCenterMesh?.();
             });
         }

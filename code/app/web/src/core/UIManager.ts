@@ -41,15 +41,64 @@ export class UIManager {
     setViewer(viewer: any): void {
         this.viewer = viewer;
         
+        // Configure FILE section Export callback (common to ALL projects)
+        this.toolbar.configureFileCallbacks({
+            onExport: () => {
+                uiLogger.info('[UIManager] Exporting scene');
+                if (this.viewer) {
+                    try {
+                        // Generate timestamp for unique filename
+                        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                        const filename = `polylab-scene-${timestamp}.pls`;
+                        
+                        // Call WASM export_scene
+                        const zipData = this.viewer.export_scene(filename);
+                        
+                        // Create Blob and trigger download
+                        const blob = new Blob([zipData], { type: 'application/zip' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        
+                        uiLogger.info(`[UIManager] Scene exported successfully: ${filename}`);
+                    } catch (error) {
+                        uiLogger.error('[UIManager] Export failed', error);
+                        alert(`Export failed: ${error}`);
+                    }
+                } else {
+                    uiLogger.warn('[UIManager] Viewer not set yet');
+                }
+            }
+        });
+        
         // Configure VIEW section callbacks (common to ALL projects)
         this.toolbar.configureViewCallbacks({
             onResetCamera: () => {
-                uiLogger.info('Reset camera (not implemented yet)');
-                // TODO: Implement camera reset
+                uiLogger.info('[UIManager] Resetting camera to default position');
+                if (this.viewer) {
+                    this.viewer.reset_camera();
+                    uiLogger.info('[UIManager] Camera reset successful');
+                } else {
+                    uiLogger.warn('[UIManager] Viewer not set yet');
+                }
             },
             onCenterMesh: () => {
-                uiLogger.info('Center mesh (not implemented yet)');
-                // TODO: Implement mesh centering
+                uiLogger.info('[UIManager] Centering camera on meshes');
+                if (this.viewer) {
+                    const success = this.viewer.center_on_meshes();
+                    if (success) {
+                        uiLogger.info('[UIManager] Camera centered on meshes');
+                    } else {
+                        uiLogger.warn('[UIManager] No visible meshes to center on');
+                    }
+                } else {
+                    uiLogger.warn('[UIManager] Viewer not set yet');
+                }
             },
             onRenderModeChange: (modes) => {
                 uiLogger.info('[UIManager] Render modes changed (common)', modes);
@@ -62,7 +111,7 @@ export class UIManager {
             }
         });
         
-        uiLogger.info('UIManager viewer set and VIEW callbacks configured (common to all projects)');
+        uiLogger.info('UIManager viewer set, FILE Export and VIEW callbacks configured (common to all projects)');
     }
 
     /**

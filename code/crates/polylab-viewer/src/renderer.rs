@@ -700,6 +700,73 @@ impl Renderer {
         self.camera.orbit_around(delta_yaw, delta_pitch);
     }
     
+    /// Reset camera to default position and orientation
+    ///
+    /// Sets camera to (0, 0, 10) looking at origin with default angles.
+    /// Useful for "reset view" button functionality.
+    pub fn camera_reset(&mut self) {
+        self.camera.set_position(Vec3::new(0.0, 0.0, 10.0));
+        self.camera.set_yaw(0.0);
+        self.camera.set_pitch(0.0);
+        self.camera.set_orbit_target(Vec3::ZERO);
+    }
+    
+    /// Center camera on all visible meshes in the scene
+    ///
+    /// Calculates bounding box of all visible meshes, positions camera to view them all,
+    /// and sets orbit target to the center. Returns true if successful, false if no visible meshes.
+    pub fn camera_center_on_meshes(&mut self) -> bool {
+        // Collect bounding boxes of all visible meshes
+        let mut global_min = None;
+        let mut global_max = None;
+        
+        for entry in self.meshes.values() {
+            if !entry.visible {
+                continue;
+            }
+            
+            if let Some((mesh_min, mesh_max)) = entry.cpu_mesh.bounding_box() {
+                match (global_min, global_max) {
+                    (None, None) => {
+                        global_min = Some(mesh_min);
+                        global_max = Some(mesh_max);
+                    }
+                    (Some(gmin), Some(gmax)) => {
+                        global_min = Some(gmin.min(mesh_min));
+                        global_max = Some(gmax.max(mesh_max));
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+        
+        // If no visible meshes, do nothing
+        let (min, max) = match (global_min, global_max) {
+            (Some(min), Some(max)) => (min, max),
+            _ => return false,
+        };
+        
+        // Calculate center and size of bounding box
+        let center = (min + max) * 0.5;
+        let size = max - min;
+        let max_dimension = size.x.max(size.y).max(size.z);
+        
+        // Position camera at a distance to view entire bounding box
+        // Use FOV to calculate required distance
+        let fov_rad = self.camera.fov.to_radians();
+        let distance = (max_dimension * 0.5) / (fov_rad * 0.5).tan() * 1.5; // 1.5 for margin
+        
+        // Place camera in front of center, looking at it
+        let new_position = center + Vec3::new(0.0, 0.0, distance);
+        
+        self.camera.set_position(new_position);
+        self.camera.set_orbit_target(center);
+        self.camera.set_yaw(0.0);
+        self.camera.set_pitch(0.0);
+        
+        true
+    }
+    
     /// Render a frame with a custom view-projection matrix
     ///
     /// Similar to render() but uses the provided view-projection matrix
@@ -786,6 +853,55 @@ impl Renderer {
         output.present();
 
         Ok(())
+    }
+    
+    /// Export current scene to PolyLab Scene (.pls) format
+    ///
+    /// Collects all visible meshes, camera, and light into a Scene structure
+    /// and exports as a ZIP archive containing OBJ files and JSON metadata.
+    ///
+    /// # Returns
+    /// ZIP file bytes ready for download
+    ///
+    /// # Errors
+    /// Returns error if export fails (e.g., ZIP creation error)
+    pub fn export_scene(&self, scene_name: String) -> Result<Vec<u8>, String> {
+        use polylab_core::{Scene, Camera as SceneCamera, Light as SceneLight};
+        
+        // Create scene
+        let mut scene = Scene::new(scene_name);
+        
+        // Convert camera
+        let camera_pos = self.camera.position();
+        let camera_target = self.camera.orbit_target();
+        scene.camera = SceneCamera {
+            position: camera_pos,
+            target: camera_target,
+            fov: self.camera.fov,
+            near: self.camera.near,
+            far: self.camera.far,
+        };
+        
+        // Convert light
+        scene.light = SceneLight {
+            direction: self.light.direction,
+            color: self.light.color,
+            intensity: self.light.intensity,
+        };
+        
+        // Add all visible meshes
+        for (id, entry) in &self.meshes {
+            if entry.visible {
+                scene.add_mesh(
+                    id.clone(),
+                    id.clone(), // Use ID as name for now
+                    entry.cpu_mesh.clone()
+                );
+            }
+        }
+        
+        // Export to PLS format
+        scene.export_to_pls()
     }
 }
 

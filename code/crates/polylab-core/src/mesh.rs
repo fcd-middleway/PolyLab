@@ -174,6 +174,76 @@ impl Mesh {
             }
         }
     }
+    
+    /// Export mesh to OBJ format
+    ///
+    /// Generates a Wavefront OBJ file string from the mesh data.
+    /// Includes vertices (v), normals (vn), and faces (f).
+    ///
+    /// # Format
+    /// - Vertices: `v x y z`
+    /// - Normals: `vn x y z` (if present)
+    /// - Faces: `f v1//vn1 v2//vn2 v3//vn3` (with normals) or `f v1 v2 v3` (without)
+    ///
+    /// # Example
+    /// ```
+    /// use polylab_core::Mesh;
+    /// 
+    /// let mesh = Mesh::new();
+    /// // ... build mesh ...
+    /// let obj_content = mesh.to_obj();
+    /// // Save to file or send over network
+    /// ```
+    pub fn to_obj(&self) -> String {
+        let mut obj = String::new();
+        
+        // Header comment
+        obj.push_str("# PolyLab OBJ Export\n");
+        obj.push_str(&format!("# {} vertices, {} faces\n\n", 
+            self.vertices.len(), self.faces.len()));
+        
+        // Vertices
+        for vertex in &self.vertices {
+            let pos = vertex.position;
+            obj.push_str(&format!("v {} {} {}\n", pos.x, pos.y, pos.z));
+        }
+        obj.push('\n');
+        
+        // Normals (if present)
+        let has_normals = self.vertices.iter().any(|v| v.normal.is_some());
+        if has_normals {
+            for vertex in &self.vertices {
+                if let Some(normal) = vertex.normal {
+                    obj.push_str(&format!("vn {} {} {}\n", normal.x, normal.y, normal.z));
+                } else {
+                    // Default normal (pointing up) if not present
+                    obj.push_str("vn 0.0 1.0 0.0\n");
+                }
+            }
+            obj.push('\n');
+        }
+        
+        // Faces
+        for face in &self.faces {
+            if has_normals {
+                // Format: f v1//vn1 v2//vn2 v3//vn3
+                obj.push_str(&format!("f {}//{} {}//{} {}//{}\n",
+                    face.vertices[0] + 1, face.vertices[0] + 1,
+                    face.vertices[1] + 1, face.vertices[1] + 1,
+                    face.vertices[2] + 1, face.vertices[2] + 1
+                ));
+            } else {
+                // Format: f v1 v2 v3
+                obj.push_str(&format!("f {} {} {}\n",
+                    face.vertices[0] + 1,
+                    face.vertices[1] + 1,
+                    face.vertices[2] + 1
+                ));
+            }
+        }
+        
+        obj
+    }
 }
 
 impl Default for Mesh {

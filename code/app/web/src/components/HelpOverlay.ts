@@ -128,6 +128,16 @@ export class HelpOverlay implements UIComponent {
         this.element.querySelector('.help-overlay-backdrop')?.addEventListener('click', () => {
             this.hide();
         });
+
+        // Enable mouse wheel scrolling on content
+        const contentElement = this.element.querySelector('.help-overlay-content');
+        if (contentElement) {
+            // Ensure wheel events can scroll the content
+            contentElement.addEventListener('wheel', (e: WheelEvent) => {
+                // Stop propagation to prevent scrolling the page behind the overlay
+                e.stopPropagation();
+            });
+        }
     }
 
     /**

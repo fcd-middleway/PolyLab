@@ -34,6 +34,8 @@
     max-height: 85vh;
     width: 90%;
     overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
     animation: helpSlideIn 0.3s ease-out;
 }
 

@@ -4,7 +4,9 @@
 
 pub mod mesh;
 pub mod obj_parser;
+pub mod scene;
 
 // Re-export main types
 pub use mesh::{Mesh, Vertex, Face};
 pub use obj_parser::{parse_obj, ObjParseError};
+pub use scene::{Scene, Camera, Light, MeshEntry};

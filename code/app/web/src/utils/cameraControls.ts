@@ -249,6 +249,12 @@ export class CameraControls {
     private onMouseDown(event: MouseEvent): void {
         if (!this.enabled) return;
         
+        // ONLY allow rotation when clicking on the canvas element
+        const target = event.target as HTMLElement;
+        if (target.tagName !== 'CANVAS') {
+            return;
+        }
+        
         // Left mouse button for orbital rotation
         if (event.button === 0) {
             this.isDragging = true;
@@ -283,7 +289,7 @@ export class CameraControls {
      * Handle mouse up event (end orbital rotation)
      */
     private onMouseUp(event: MouseEvent): void {
-        if (event.button === 0) {
+        if (event.button === 0 && this.isDragging) {
             this.isDragging = false;
             appLogger.debug('Ended orbital rotation drag');
         }

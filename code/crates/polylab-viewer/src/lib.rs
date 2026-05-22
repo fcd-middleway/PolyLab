@@ -569,6 +569,39 @@ impl ViewerHandle {
         self.renderer.camera_orbit_around(delta_yaw, delta_pitch);
     }
     
+    /// Reset camera to default position
+    ///
+    /// Resets camera to (0, 0, 10) looking at origin.
+    /// Useful for "reset view" button.
+    #[wasm_bindgen]
+    pub fn reset_camera(&mut self) {
+        self.renderer.camera_reset();
+    }
+    
+    /// Center camera on all visible meshes
+    ///
+    /// Calculates bounding box of all visible meshes and positions camera to view them all.
+    /// Returns true if successful, false if no visible meshes in scene.
+    #[wasm_bindgen]
+    pub fn center_on_meshes(&mut self) -> bool {
+        self.renderer.camera_center_on_meshes()
+    }
+    
+    /// Export current scene to PolyLab Scene (.pls) format
+    ///
+    /// Exports all visible meshes, camera, and light to a ZIP archive containing:
+    /// - manifest.json with scene metadata
+    /// - meshes/*.obj with geometry
+    /// - cameras/main.json with camera parameters
+    /// - lights/directional.json with light parameters
+    ///
+    /// Returns ZIP file as byte array for download.
+    #[wasm_bindgen]
+    pub fn export_scene(&self, name: &str) -> Result<Vec<u8>, JsValue> {
+        self.renderer.export_scene(name.to_string())
+            .map_err(|e| JsValue::from_str(&e))
+    }
+    
     // ========================
     // Custom View-Projection Matrix Rendering
     // ========================

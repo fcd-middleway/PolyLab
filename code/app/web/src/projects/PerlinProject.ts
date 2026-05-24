@@ -12,6 +12,10 @@ import type { PropertiesPanel } from '../components/PropertiesPanel';
 import type { ScenePanel } from '../components/ScenePanel';
 import { PerlinControlPanel, type TerrainParams } from '../components/PerlinControlPanel';
 import { appLogger, meshLogger } from '../utils/logger';
+import { meshDataToObj } from '../utils/terrainUtils';
+
+// Import terrain WASM bindings
+import initTerrain, { WasmTerrainConfig, TerrainHandle } from '../../public/wasm/terrain/polylab_terrain';
 
 export class PerlinProject extends BaseProject {
     private statusBar: StatusBar | null = null;
@@ -20,6 +24,7 @@ export class PerlinProject extends BaseProject {
     private controlPanel: PerlinControlPanel | null = null;
     private controlPanelContent: HTMLElement | null = null; // Keep reference to injected content
     private currentTerrainId: string | null = null;
+    private terrainWasmInitialized: boolean = false;
     
     // Default terrain parameters
     private params: TerrainParams = {
@@ -122,6 +127,16 @@ export class PerlinProject extends BaseProject {
         appLogger.info('Initializing Perlin project...');
         this.viewer = viewer;
         
+        // Initialize terrain WASM module
+        try {
+            await initTerrain();
+            this.terrainWasmInitialized = true;
+            appLogger.info('Terrain WASM module initialized');
+        } catch (error) {
+            appLogger.error('Failed to initialize terrain WASM', error);
+            this.terrainWasmInitialized = false;
+        }
+        
         // Set up visibility toggle callback
         if (this.scenePanel) {
             this.scenePanel.setVisibilityCallback((id: string, visible: boolean) => {
@@ -192,6 +207,14 @@ export class PerlinProject extends BaseProject {
             return;
         }
 
+        if (!this.terrainWasmInitialized) {
+            appLogger.error('Cannot generate terrain: terrain WASM not initialized');
+            if (this.statusBar) {
+                this.statusBar.updateStats({ status: '❌ Terrain WASM not loaded' });
+            }
+            return;
+        }
+
         meshLogger.info('Generating terrain...', { params: this.params });
         
         if (this.statusBar) {
@@ -210,22 +233,45 @@ export class PerlinProject extends BaseProject {
             // Generate new terrain ID
             this.currentTerrainId = `terrain-${Date.now()}`;
 
-            // Call WASM function to generate terrain
-            this.viewer.generate_terrain(
-                this.currentTerrainId,
-                this.params.seed,
-                this.params.octaves,
-                this.params.persistence,
-                this.params.scale,
-                this.params.width,
-                this.params.depth,
-                this.params.widthSegments,
-                this.params.depthSegments
+            // Create terrain configuration from UI parameters
+            const config = new WasmTerrainConfig();
+            config.width = this.params.widthSegments + 1;  // segments + 1 = vertices
+            config.height = this.params.depthSegments + 1;
+            config.resolution = this.params.width / this.params.widthSegments;  // world units per cell
+            config.seed = BigInt(this.params.seed);
+            config.frequency = 1.0 / this.params.scale;  // Convert scale to frequency
+            config.octaves = this.params.octaves;
+            config.persistence = this.params.persistence;
+            config.lacunarity = 2.0;
+            config.height_scale = 10.0;  // Default height scale
+
+            // Generate terrain using new system
+            const terrainHandle = new TerrainHandle(config);
+            const meshData = terrainHandle.getMeshData();
+
+            // Convert mesh data to OBJ format
+            const objContent = meshDataToObj(
+                new Float32Array(meshData.vertices),
+                new Float32Array(meshData.colors),
+                new Uint32Array(meshData.faces)
             );
+
+            // Load mesh into viewer
+            this.viewer.load_mesh(this.currentTerrainId, objContent);
 
             // Get mesh details
             const details = this.viewer.mesh_details(this.currentTerrainId);
             const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
+
+            // Store heightmap and slope map for future visualization
+            // TODO: Display these in a debug panel
+            const heightmap = meshData.heightmap;
+            const slopeMap = meshData.slope_map;
+            
+            meshLogger.debug('Terrain maps generated', {
+                heightmapSize: heightmap?.length || 0,
+                slopeMapSize: slopeMap?.length || 0
+            });
 
             // Add mesh to MeshPanel
             if (this.scenePanel) {
@@ -263,8 +309,13 @@ export class PerlinProject extends BaseProject {
                 seed: this.params.seed,
                 vertices: Math.round(vertices),
                 triangles: Math.round(triangles),
-                dimensions: [sizeX, sizeY, sizeZ]
+                dimensions: [sizeX, sizeY, sizeZ],
+                heightRange: [meshData.stats.min_height, meshData.stats.max_height]
             });
+
+            // Clean up WASM handles
+            terrainHandle.free();
+            config.free();
 
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);

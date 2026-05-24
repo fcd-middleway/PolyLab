@@ -49,8 +49,8 @@ export interface DropZoneConfig {
  * Callbacks for toolbar FILE section
  */
 export interface FileCallbacks {
-    onLoad: (content: string, filename: string) => void;
-    onError?: (error: Error) => void;
+    onLoad: (content: string, filename: string) => Promise<void>;
+    onError?: (error: string) => void;
     onExport?: () => void;
 }
 

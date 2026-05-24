@@ -10,6 +10,8 @@ import type { ProjectConfig } from '../core/types';
 import type { StatusBar } from '../components/StatusBar';
 import type { PropertiesPanel } from '../components/PropertiesPanel';
 import type { ScenePanel } from '../components/ScenePanel';
+import { LayoutManager } from '../core/LayoutManager';
+import { RoverUITemplates } from './RoverUITemplates';
 import { appLogger } from '../utils/logger';
 
 type ViewMode = 'scene' | 'stereo' | 'depth' | 'full-grid' | 'point-cloud';
@@ -19,11 +21,9 @@ export class RoverProject extends BaseProject {
     private detailsPanel: PropertiesPanel | null = null;
     private scenePanel: ScenePanel | null = null;
     
-    // Current view mode
+    // Layout management
+    private layoutManager: LayoutManager | null = null;
     private currentViewMode: ViewMode = 'scene';
-    
-    // Store original canvas to restore when switching back to scene mode
-    private originalCanvas: HTMLCanvasElement | null = null;
     
     // Stereo viewers for dual-camera mode
     private leftViewer: any | null = null;
@@ -53,9 +53,9 @@ export class RoverProject extends BaseProject {
             
             fileCallbacks: {
                 onLoad: (content: string, filename: string) => this.onMeshFileLoaded(content, filename),
-                onError: (error: Error) => {
+                onError: (error: string) => {
                     appLogger.error('[RoverProject] Failed to load mesh', error);
-                    this.statusBar?.updateStats({ status: `❌ Error: ${error.message}` });
+                    this.statusBar?.updateStats({ status: `❌ Error: ${error}` });
                 }
             },
             
@@ -139,11 +139,16 @@ export class RoverProject extends BaseProject {
         appLogger.info('Initializing Rover project...');
         this.viewer = viewer;
         
+        // Initialize LayoutManager
         // Store original canvas reference
         const canvasContainer = document.getElementById('canvas-container');
-        if (canvasContainer) {
-            this.originalCanvas = canvasContainer.querySelector('canvas');
+        if (!canvasContainer) {
+            throw new Error('Canvas container not found');
         }
+        
+        // Initialize LayoutManager (it will handle canvas preservation)
+        this.layoutManager = new LayoutManager(canvasContainer);
+        this.registerLayouts();
         
         // Set up visibility toggle callback
         if (this.scenePanel) {
@@ -155,10 +160,67 @@ export class RoverProject extends BaseProject {
         // Load initial scene
         await this.loadInitialScene();
         
-        // Set initial view mode
-        this.switchViewMode('scene');
-        
         appLogger.info('Rover project ready - use arrow keys to navigate');
+    }
+
+    /**
+     * Register all available layouts with the LayoutManager
+     */
+    private registerLayouts(): void {
+        if (!this.layoutManager) return;
+
+        // Note: 'scene' mode is handled by restoreOriginal() in switchViewMode()
+        // No need to register it as a layout
+
+        // Stereo layout - dual camera views
+        this.layoutManager.registerLayout({
+            id: 'stereo',
+            title: 'Stereo Vision',
+            setup: async (container) => {
+                appLogger.debug('[RoverProject] Setting up Stereo layout');
+                container.innerHTML = RoverUITemplates.generateStereoViewHTML();
+                await this.initStereoViewers();
+            },
+            cleanup: async () => {
+                appLogger.debug('[RoverProject] Cleaning up Stereo layout');
+                await this.cleanupStereoViewers();
+            }
+        });
+
+        // Depth layout - depth map visualization
+        this.layoutManager.registerLayout({
+            id: 'depth',
+            title: 'Depth Analysis',
+            setup: (container) => {
+                appLogger.debug('[RoverProject] Setting up Depth layout');
+                container.innerHTML = RoverUITemplates.generateDepthViewHTML();
+                // TODO: Wire up depth computation button
+            }
+        });
+
+        // Full grid layout - all views at once
+        this.layoutManager.registerLayout({
+            id: 'full-grid',
+            title: 'Full Analysis',
+            setup: (container) => {
+                appLogger.debug('[RoverProject] Setting up Full Grid layout');
+                container.innerHTML = RoverUITemplates.generateFullGridHTML();
+                // TODO: Initialize all 4 views
+            }
+        });
+
+        // Point cloud layout - 3D reconstruction
+        this.layoutManager.registerLayout({
+            id: 'point-cloud',
+            title: 'Point Cloud',
+            setup: (container) => {
+                appLogger.debug('[RoverProject] Setting up Point Cloud layout');
+                container.innerHTML = RoverUITemplates.generatePointCloudHTML();
+                // TODO: Wire up point cloud generation
+            }
+        });
+
+        appLogger.info('[RoverProject] All layouts registered');
     }
 
     update(deltaTime: number): void {
@@ -170,7 +232,13 @@ export class RoverProject extends BaseProject {
     cleanup(): void {
         appLogger.info('Cleaning up Rover project...');
         
-        // Cleanup stereo viewers
+        // Cleanup layout manager
+        if (this.layoutManager) {
+            this.layoutManager.destroy();
+            this.layoutManager = null;
+        }
+        
+        // Cleanup stereo viewers (if not already cleaned by layout manager)
         this.cleanupStereoViewers();
         
         // TODO: Remove rover meshes, camera visualizations, etc.
@@ -288,42 +356,27 @@ export class RoverProject extends BaseProject {
     /**
      * Switch to a different view mode
      */
+    /**
+     * Switch between different view modes (scene, stereo, depth, etc.)
+     */
     private async switchViewMode(mode: ViewMode): Promise<void> {
         if (this.currentViewMode === mode) return;
-        
-        appLogger.info(`Switching view mode: ${this.currentViewMode} → ${mode}`);
-        
-        // Cleanup previous mode
-        if (this.currentViewMode === 'stereo') {
-            await this.cleanupStereoViewers();
-        }
-        
-        this.currentViewMode = mode;
-        
-        const canvasContainer = document.getElementById('canvas-container');
-        if (!canvasContainer) {
-            appLogger.error('Canvas container not found');
+        if (!this.layoutManager) {
+            appLogger.error('[RoverProject] LayoutManager not initialized');
             return;
         }
         
-        // Update layout based on mode
-        switch (mode) {
-            case 'scene':
-                this.setupSceneLayout(canvasContainer);
-                break;
-            case 'stereo':
-                await this.setupStereoLayout(canvasContainer);
-                break;
-            case 'depth':
-                this.setupDepthLayout(canvasContainer);
-                break;
-            case 'full-grid':
-                this.setupFullGridLayout(canvasContainer);
-                break;
-            case 'point-cloud':
-                this.setupPointCloudLayout(canvasContainer);
-                break;
+        appLogger.info(`[RoverProject] Switching view mode: ${this.currentViewMode} → ${mode}`);
+        
+        // Special case: 'scene' mode restores the original canvas
+        if (mode === 'scene') {
+            await this.layoutManager.restoreOriginal();
+        } else {
+            // Switch to specialized layout
+            await this.layoutManager.switchLayout(mode);
         }
+        
+        this.currentViewMode = mode;
         
         // Update status bar
         const modeNames: Record<ViewMode, string> = {
@@ -340,94 +393,11 @@ export class RoverProject extends BaseProject {
             });
         }
     }
-    
-    /**
-     * Setup Scene Explorer layout (single canvas, full size)
-     */
-    private setupSceneLayout(container: HTMLElement): void {
-        appLogger.debug('Setting up Scene Explorer layout');
-        
-        // Clear container and restore original canvas
-        container.innerHTML = '';
-        
-        if (this.originalCanvas) {
-            container.appendChild(this.originalCanvas);
-        }
-        
-        // Single canvas, full size
-        container.style.display = 'block';
-        container.style.gridTemplateColumns = '';
-        container.style.gridTemplateRows = '';
-        container.style.gap = '';
-        
-        const mainCanvas = container.querySelector('canvas');
-        if (mainCanvas) {
-            mainCanvas.style.display = 'block';
-            mainCanvas.style.width = '100%';
-            mainCanvas.style.height = '100%';
-        }
-    }
-    
-    /**
-     * Setup Stereo Vision layout (two canvases side-by-side)
-     */
-    private async setupStereoLayout(container: HTMLElement): Promise<void> {
-        appLogger.debug('Setting up Stereo Vision layout');
-        
-        // Clear existing content
-        container.innerHTML = '';
-        
-        // Clean up existing stereo viewers
-        await this.cleanupStereoViewers();
-        
-        // Create grid layout for two canvases
-        container.style.display = 'grid';
-        container.style.gridTemplateColumns = '1fr 1fr';
-        container.style.gridTemplateRows = '1fr';
-        container.style.gap = '2px';
-        
-        // Create left canvas
-        const leftCanvas = document.createElement('canvas');
-        leftCanvas.id = 'stereo-canvas-left';
-        leftCanvas.style.width = '100%';
-        leftCanvas.style.height = '100%';
-        leftCanvas.style.display = 'block';
-        
-        // Create right canvas
-        const rightCanvas = document.createElement('canvas');
-        rightCanvas.id = 'stereo-canvas-right';
-        rightCanvas.style.width = '100%';
-        rightCanvas.style.height = '100%';
-        rightCanvas.style.display = 'block';
-        
-        // Add to container
-        container.appendChild(leftCanvas);
-        container.appendChild(rightCanvas);
-        
-        // Store canvas references
-        this.stereoCanvasLeft = leftCanvas;
-        this.stereoCanvasRight = rightCanvas;
-        
-        // Initialize stereo viewers
-        try {
-            await this.initStereoViewers();
-            appLogger.info('Stereo viewers initialized successfully');
-        } catch (error) {
-            appLogger.error('Failed to initialize stereo viewers:', error);
-            
-            // Show error message
-            container.innerHTML = `
-                <div style="grid-column: 1 / 3; display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #ff6b6b;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 48px;">⚠️</div>
-                        <p style="margin-top: 16px;">Failed to initialize stereo cameras</p>
-                        <p style="font-size: 12px; color: #999; margin-top: 8px;">Check console for details</p>
-                    </div>
-                </div>
-            `;
-        }
-    }
-    
+
+    // ========================
+    // Stereo Vision Management
+    // ========================
+
     /**
      * Initialize left and right viewers for stereo mode
      */
@@ -530,107 +500,10 @@ export class RoverProject extends BaseProject {
             this.stereoCanvasRight = null;
         }
     }
-    
-    
-    /**
-     * Setup Depth Analysis layout (stereo pair + depth map + histogram)
-     */
-    private setupDepthLayout(container: HTMLElement): void {
-        appLogger.debug('Setting up Depth Analysis layout');
-        
-        // TODO: Create layout with stereo pair (left), depth map (top right), histogram (bottom right)
-        // For now, show placeholder
-        container.style.display = 'grid';
-        container.style.gridTemplateColumns = '2fr 1fr';
-        container.style.gridTemplateRows = '1fr 1fr';
-        container.style.gap = '2px';
-        
-        container.innerHTML = `
-            <div style="grid-row: 1 / 3; display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 48px;">👁️👁️</div>
-                    <p style="margin-top: 16px;">Stereo Pair</p>
-                    <p style="font-size: 12px; color: #444;">(Left + Right)</p>
-                </div>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 48px;">🗺️</div>
-                    <p style="margin-top: 16px;">Depth Map</p>
-                    <p style="font-size: 12px; color: #444;">(Colorized)</p>
-                </div>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 48px;">📊</div>
-                    <p style="margin-top: 16px;">Histogram</p>
-                    <p style="font-size: 12px; color: #444;">(Depth distribution)</p>
-                </div>
-            </div>
-        `;
-    }
-    
-    /**
-     * Setup Full Grid layout (2x2 grid)
-     */
-    private setupFullGridLayout(container: HTMLElement): void {
-        appLogger.debug('Setting up Full Grid layout');
-        
-        // TODO: Create 2x2 grid with scene, camera, point cloud, depth map
-        container.style.display = 'grid';
-        container.style.gridTemplateColumns = '1fr 1fr';
-        container.style.gridTemplateRows = '1fr 1fr';
-        container.style.gap = '2px';
-        
-        container.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 32px;">🎬</div>
-                    <p style="margin-top: 8px;">Scene 3D</p>
-                </div>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 32px;">📷</div>
-                    <p style="margin-top: 8px;">Camera L</p>
-                </div>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 32px;">🎨</div>
-                    <p style="margin-top: 8px;">Point Cloud</p>
-                </div>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 32px;">🗺️</div>
-                    <p style="margin-top: 8px;">Depth Map</p>
-                </div>
-            </div>
-        `;
-    }
-    
-    /**
-     * Setup Point Cloud layout (single canvas optimized for points)
-     */
-    private setupPointCloudLayout(container: HTMLElement): void {
-        appLogger.debug('Setting up Point Cloud layout');
-        
-        // TODO: Create optimized point cloud renderer
-        container.style.display = 'grid';
-        container.style.gridTemplateColumns = '1fr';
-        container.style.gridTemplateRows = '1fr';
-        
-        container.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; background: #1a1a1a; color: #666;">
-                <div style="text-align: center;">
-                    <div style="font-size: 64px;">🎨</div>
-                    <p style="margin-top: 16px; font-size: 18px;">Point Cloud Viewer</p>
-                    <p style="font-size: 12px; color: #444; margin-top: 8px;">(Coming soon)</p>
-                </div>
-            </div>
-        `;
-    }
+
+    // ========================
+    // Scene Loading
+    // ========================
 
     /**
      * Load initial scene with ground plane, rover, and target cube

@@ -117,6 +117,10 @@ impl ViewerHandle {
         })
     }
 
+    // ========================
+    // Rendering
+    // ========================
+
     /// Render a frame
     ///
     /// Call this every frame from requestAnimationFrame in JS.
@@ -165,6 +169,10 @@ impl ViewerHandle {
         js_sys::Reflect::set(&obj, &"vertices".into(), &JsValue::from(self.render_modes.vertices)).unwrap();
         obj.into()
     }
+
+    // ========================
+    // Mesh Management
+    // ========================
 
     /// Load a mesh from OBJ file content
     ///
@@ -454,7 +462,8 @@ impl ViewerHandle {
     }
     
     // ========================
-    // Camera Control Methods
+    // ========================
+    // Camera Control
     // ========================
     
     /// Move camera forward/backward
@@ -586,6 +595,9 @@ impl ViewerHandle {
     pub fn center_on_meshes(&mut self) -> bool {
         self.renderer.camera_center_on_meshes()
     }
+    // ========================
+    // Scene Import/Export
+    // ========================
     
     /// Export current scene to PolyLab Scene (.pls) format
     ///
@@ -619,7 +631,7 @@ impl ViewerHandle {
     }
     
     // ========================
-    // Custom View-Projection Matrix Rendering
+    // Advanced Rendering
     // ========================
     
     /// Render a frame with a custom view-projection matrix
@@ -659,6 +671,10 @@ impl ViewerHandle {
 
     // ========================
     // Compression API
+    // ========================
+
+    // ========================
+    // Compression
     // ========================
 
     /// Create a compression handle for mesh simplification
@@ -763,7 +779,7 @@ impl ViewerHandle {
 }
 
 // ========================
-// Standalone Utility Functions (WASM)
+// Utilities
 // ========================
 
 /// Create a view-projection matrix from camera parameters (utility function)

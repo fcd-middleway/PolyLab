@@ -117,6 +117,103 @@ export abstract class BaseProject {
     }
 
     /**
+     * Helper method: Load mesh into viewer and update panels
+     * 
+     * Common mesh loading logic that can be reused by all projects.
+     * Handles mesh ID generation, viewer loading, panel updates, and error handling.
+     * 
+     * @param content - OBJ file content
+     * @param filename - Name of the file
+     * @param options - Optional callbacks and configurations
+     * @returns Mesh ID if successful, null if failed
+     */
+    protected async loadMeshHelper(
+        content: string, 
+        filename: string,
+        options?: {
+            scenePanel?: any;
+            detailsPanel?: any;
+            statusBar?: any;
+            meshIdPrefix?: string;
+            onSuccess?: (meshId: string, details: number[]) => void;
+            onError?: (error: string) => void;
+        }
+    ): Promise<string | null> {
+        try {
+            const projectName = this.getName();
+            appLogger.info(`[${projectName}] Loading mesh`, { filename, size: content.length });
+            
+            // Update status bar
+            options?.statusBar?.updateStats({ status: `Loading ${filename}...` });
+            
+            // Generate unique mesh ID
+            const meshId = `${options?.meshIdPrefix || 'mesh'}-${Date.now()}`;
+            
+            // Call WASM function to load mesh
+            this.viewer.load_mesh(meshId, content);
+            
+            // Get detailed mesh info from viewer
+            const details = this.viewer.mesh_details(meshId);
+            const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
+            
+            // Add mesh to ScenePanel if provided
+            if (options?.scenePanel) {
+                options.scenePanel.addMesh({
+                    id: meshId,
+                    name: filename,
+                    vertices: Math.round(vertices),
+                    triangles: Math.round(triangles),
+                    visible: true
+                });
+            }
+            
+            // Update DetailsPanel if provided
+            if (options?.detailsPanel) {
+                options.detailsPanel.updateDetails({
+                    vertices: Math.round(vertices),
+                    triangles: Math.round(triangles),
+                    sizeX,
+                    sizeY,
+                    sizeZ
+                });
+            }
+            
+            // Update status bar
+            if (options?.statusBar) {
+                options.statusBar.updateStats({ 
+                    status: `✅ Loaded ${filename}`,
+                    vertices: Math.round(vertices),
+                    triangles: Math.round(triangles)
+                });
+            }
+            
+            appLogger.info(`[${projectName}] Mesh loaded successfully`, { 
+                meshId,
+                filename, 
+                vertices: Math.round(vertices), 
+                triangles: Math.round(triangles)
+            });
+            
+            // Call success callback if provided
+            options?.onSuccess?.(meshId, details);
+            
+            return meshId;
+            
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            appLogger.error(`[${this.getName()}] Failed to load mesh`, { filename, error: errorMsg });
+            
+            // Update status bar with error
+            options?.statusBar?.updateStats({ status: `❌ ${errorMsg}` });
+            
+            // Call error callback if provided
+            options?.onError?.(errorMsg);
+            
+            return null;
+        }
+    }
+
+    /**
      * Set project active state (managed by ProjectManager)
      */
     setActive(active: boolean): void {

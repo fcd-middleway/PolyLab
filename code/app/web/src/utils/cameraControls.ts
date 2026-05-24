@@ -139,6 +139,10 @@ export class CameraControls {
     
     /**
      * Setup keyboard and mouse event listeners
+     * 
+     * TODO: MEMORY LEAK - Store bound functions as class properties to allow proper cleanup
+     * Currently bind() creates new functions each time, making removeEventListener impossible.
+     * Should be: this.boundOnKeyDown = this.onKeyDown.bind(this); then use this.boundOnKeyDown
      */
     private setupEventListeners(): void {
         window.addEventListener('keydown', this.onKeyDown.bind(this));
@@ -335,6 +339,15 @@ export class CameraControls {
     
     /**
      * Cleanup event listeners
+     * 
+     * TODO: CRITICAL BUG - This does NOT work! bind() creates NEW functions,
+     * so these removeEventListener calls remove nothing. The original listeners stay in memory.
+     * 
+     * Fix: Store bound functions as properties in constructor:
+     *   private boundOnKeyDown = this.onKeyDown.bind(this);
+     *   private boundOnKeyUp = this.onKeyUp.bind(this);
+     *   // ... etc for all listeners
+     * Then use: window.removeEventListener('keydown', this.boundOnKeyDown);
      */
     destroy(): void {
         window.removeEventListener('keydown', this.onKeyDown.bind(this));

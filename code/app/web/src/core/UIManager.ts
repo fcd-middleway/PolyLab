@@ -22,12 +22,12 @@ export class UIManager {
      * Create a new UIManager
      * 
      * @param toolbar - The toolbar component instance
-     * @param meshPanel - The mesh/scene panel instance (optional)
+     * @param scenePanel - The scene panel instance (optional)
      * @param detailsPanel - The properties panel instance (optional)
      */
-    constructor(toolbar: Toolbar, meshPanel?: MeshPanel, detailsPanel?: PropertiesPanel) {
+    constructor(toolbar: Toolbar, scenePanel?: ScenePanel, detailsPanel?: PropertiesPanel) {
         this.toolbar = toolbar;
-        this.meshPanel = meshPanel || null;
+        this.scenePanel = scenePanel || null;
         this.detailsPanel = detailsPanel || null;
         uiLogger.info('UIManager initialized');
     }

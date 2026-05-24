@@ -402,11 +402,13 @@ export class RoverProject extends BaseProject {
      * Initialize left and right viewers for stereo mode
      */
     private async initStereoViewers(): Promise<void> {
-        // Import WASM modules
-        const viewerModule = await import('../../public/wasm/viewer/polylab_viewer.js');
+        // Import WASM modules from crates pkg (same pattern as main viewer)
+        // @ts-ignore - WASM module from relative path
+        const viewerModule = await import('../../../../crates/polylab-viewer/pkg/polylab_viewer.js');
         await viewerModule.default();
         
-        const roverModule = await import('../../public/wasm/rover/polylab_rover.js');
+        // @ts-ignore - WASM module from relative path
+        const roverModule = await import('../../../../crates/polylab-rover/pkg/polylab_rover.js');
         await roverModule.default();
         
         // Create rover at Wall-E position (0, 0, -10) facing +Z

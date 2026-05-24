@@ -21,6 +21,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 1px;
     padding: 2px 10px;
     border: 1px solid var(--border-color);
@@ -29,6 +30,7 @@
     cursor: pointer;
     transition: all 0.2s;
     min-width: 50px;
+    height: 42px;
 }
 
 .toolbar-btn:disabled {
@@ -181,6 +183,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 1px;
     padding: 2px 10px;
     border: 1px solid var(--border-color);
@@ -189,6 +192,7 @@
     cursor: pointer;
     transition: all 0.2s;
     min-width: 50px;
+    height: 42px;
 }
 
 .toolbar-layout-btn:disabled {

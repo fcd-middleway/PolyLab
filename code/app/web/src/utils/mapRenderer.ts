@@ -80,8 +80,12 @@ export const COLORMAPS = {
 export function getColorFromMap(value: number, colormap: ColormapConfig): [number, number, number] {
     const { colors, min = 0, max = 1 } = colormap;
     
-    // Normalize value to [0, 1]
-    const normalized = Math.max(0, Math.min(1, (value - min) / (max - min)));
+    // Handle case where min == max (flat data)
+    // In this case, use the middle color of the colormap
+    const range = max - min;
+    const normalized = range > 0 
+        ? Math.max(0, Math.min(1, (value - min) / range))
+        : 0.5;  // Use middle of colormap for flat data
     
     // Find gradient segment
     const segments = colors.length - 1;
@@ -101,7 +105,24 @@ export function renderScalarMap(
     height: number,
     colormap: ColormapConfig
 ): void {
-    appLogger.debug('[MapRenderer] Rendering scalar map', { width, height, dataLength: data.length });
+    appLogger.debug('[MapRenderer] Rendering scalar map', { 
+        width, 
+        height, 
+        dataLength: data?.length,
+        dataType: data?.constructor?.name,
+        expectedLength: width * height
+    });
+    
+    // Validate data dimensions
+    if (!data || data.length !== width * height) {
+        appLogger.error('[MapRenderer] Data dimensions mismatch!', {
+            dataLength: data?.length,
+            expectedLength: width * height,
+            width,
+            height
+        });
+        return;
+    }
     
     // Set canvas size
     canvas.width = width;

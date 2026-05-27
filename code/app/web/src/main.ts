@@ -21,6 +21,7 @@ import './styles/toolbar.css';
 import './styles/panels.css';
 import './styles/statusbar.css';
 import './styles/help.css';
+import './styles/terrain-pipeline-banner.css';
 
 /**
  * Initialize the UI components
@@ -43,8 +44,22 @@ function initializeUI() {
     mainContent.className = 'main-content';
     mainContent.id = 'main-content';
     
+    // Create a wrapper for viewer area (banner + canvas-container)
+    const viewerArea = document.createElement('div');
+    viewerArea.className = 'viewer-area';
+    viewerArea.style.cssText = 'display: flex; flex-direction: column; flex: 1; overflow: hidden;';
+    
+    // Create permanent banner container (above canvas-container)
+    const bannerContainer = document.createElement('div');
+    bannerContainer.id = 'terrain-banner-container';
+    bannerContainer.className = 'terrain-banner-container';
+    bannerContainer.style.cssText = 'flex-shrink: 0;';
+    
+    viewerArea.appendChild(bannerContainer);
+    viewerArea.appendChild(viewerCanvas.element);
+    
     mainContent.appendChild(scenePanel.element);
-    mainContent.appendChild(viewerCanvas.element);
+    mainContent.appendChild(viewerArea);
     mainContent.appendChild(detailsPanel.element);
 
     app.appendChild(header.element);
@@ -178,8 +193,8 @@ async function main() {
         // Create PerlinProject
         const perlinProject = new PerlinProject();
         
-        // Inject UI components into PerlinProject
-        perlinProject.setUIComponents(ui.scenePanel, ui.statusBar, ui.detailsPanel);
+        // Inject UI components into PerlinProject (including viewerCanvas for banner injection)
+        perlinProject.setUIComponents(ui.scenePanel, ui.statusBar, ui.detailsPanel, ui.viewerCanvas);
         
         // Register PerlinProject (will be initialized when activated)
         projectManager.registerProject(perlinProject);

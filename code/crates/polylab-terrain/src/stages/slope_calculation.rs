@@ -65,13 +65,14 @@ impl PipelineStage for SlopeCalculationStage {
     }
 
     fn can_execute(&self, terrain: &TerrainData) -> Result<(), TerrainError> {
-        // Check that heightmap has been filled
+        // Check that heightmap has valid dimensions
         let heightmap = terrain.heightmap();
-        if heightmap.max() == 0.0 && heightmap.min() == 0.0 {
+        if heightmap.width == 0 || heightmap.height == 0 {
             return Err(TerrainError::MissingData(
-                "Heightmap is empty. Run noise generation first.".to_string()
+                "Heightmap has invalid dimensions (0x0)".to_string()
             ));
         }
+        // Note: A flat heightmap (all zeros) is valid - slope will be zero everywhere
         Ok(())
     }
 

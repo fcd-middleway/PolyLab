@@ -67,8 +67,18 @@ body {
 .viewer-container {
     flex: 1;
     display: flex;
+    flex-direction: column;
     background: var(--bg-primary);
     position: relative;
+}
+
+.viewer-banner-container {
+    /* Banner injected here dynamically by projects */
+}
+
+.viewer-canvas-wrapper {
+    flex: 1;
+    display: flex;
     padding: 8px;
 }
 

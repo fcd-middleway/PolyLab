@@ -94,20 +94,27 @@ pub struct TerrainStats {
 /// Handle for terrain generation
 ///
 /// This struct provides methods for generating procedural terrain.
+/// Supports both one-shot generation and step-by-step pipeline execution.
 #[wasm_bindgen]
 pub struct TerrainHandle {
     terrain: TerrainData,
+    pipeline: Pipeline,
+    current_step: usize,
 }
 
 #[wasm_bindgen]
 impl TerrainHandle {
-    /// Generate terrain with given configuration
+    /// Generate terrain with given configuration (legacy one-shot mode)
     ///
     /// # Arguments
     /// * `config` - Terrain generation configuration
     ///
     /// # Returns
     /// A new terrain handle with generated data
+    ///
+    /// # Note
+    /// This constructor builds and executes the entire pipeline at once.
+    /// For step-by-step control, use `create_base()` and add stages manually.
     #[wasm_bindgen(constructor)]
     pub fn new(config: WasmTerrainConfig) -> Result<TerrainHandle, JsValue> {
         // Set up panic hook for better error messages
@@ -150,7 +157,162 @@ impl TerrainHandle {
         pipeline.execute(&mut terrain)
             .map_err(|e| JsValue::from_str(&format!("Pipeline error: {}", e)))?;
 
-        Ok(TerrainHandle { terrain })
+        Ok(TerrainHandle { 
+            terrain,
+            pipeline,
+            current_step: 3, // All 3 stages completed
+        })
+    }
+
+    /// Create a base terrain with flat heightmap (step-by-step mode)
+    ///
+    /// # Arguments
+    /// * `width` - Width of terrain grid (number of vertices)
+    /// * `height` - Height of terrain grid (number of vertices)
+    /// * `resolution` - Resolution in world units (distance between grid points)
+    /// * `seed` - Random seed for deterministic generation
+    ///
+    /// # Returns
+    /// A new terrain handle with flat heightmap initialized to 0.0
+    #[wasm_bindgen(js_name = createBase)]
+    pub fn create_base(width: usize, height: usize, resolution: f32, seed: u64) -> Result<TerrainHandle, JsValue> {
+        console_error_panic_hook::set_once();
+
+        let terrain_config = TerrainConfig {
+            width,
+            height,
+            resolution,
+            seed,
+        };
+
+        let terrain = TerrainData::new(terrain_config);
+        let pipeline = Pipeline::new();
+
+        Ok(TerrainHandle {
+            terrain,
+            pipeline,
+            current_step: 0,
+        })
+    }
+
+    /// Add Perlin noise generation stage to the pipeline
+    ///
+    /// # Arguments
+    /// * `frequency` - Noise frequency (lower = larger features)
+    /// * `octaves` - Number of noise octaves (more = more detail)
+    /// * `persistence` - Amplitude decay per octave (lower = smoother)
+    /// * `lacunarity` - Frequency multiplier per octave
+    /// * `height_scale` - Height scale multiplier
+    #[wasm_bindgen(js_name = addNoiseStage)]
+    pub fn add_noise_stage(
+        &mut self,
+        frequency: f32,
+        octaves: u32,
+        persistence: f32,
+        lacunarity: f32,
+        height_scale: f32,
+    ) {
+        let noise_stage = NoiseGenerationStage::new(NoiseGenerationConfig {
+            frequency,
+            octaves,
+            persistence,
+            lacunarity,
+            height_scale,
+            height_offset: 0.0,
+        });
+        self.pipeline.add_stage(Box::new(noise_stage));
+    }
+
+    /// Add slope calculation stage to the pipeline
+    #[wasm_bindgen(js_name = addSlopeStage)]
+    pub fn add_slope_stage(&mut self) {
+        self.pipeline.add_stage(Box::new(SlopeCalculationStage));
+    }
+
+    /// Add mesh building stage to the pipeline
+    ///
+    /// # Arguments
+    /// * `apply_color` - Whether to apply height-based coloring
+    /// * `calculate_normals` - Whether to calculate smooth vertex normals
+    #[wasm_bindgen(js_name = addMeshStage)]
+    pub fn add_mesh_stage(&mut self, apply_color: bool, calculate_normals: bool) {
+        use crate::stages::MeshBuildingConfig;
+        
+        let config = MeshBuildingConfig {
+            apply_color,
+            calculate_normals,
+        };
+        self.pipeline.add_stage(Box::new(MeshBuildingStage::new(config)));
+    }
+
+    /// Execute the next stage in the pipeline
+    ///
+    /// # Returns
+    /// Ok with stage name if successful, Err if pipeline is complete or stage fails
+    #[wasm_bindgen(js_name = executeNextStep)]
+    pub fn execute_next_step(&mut self) -> Result<String, JsValue> {
+        if self.current_step >= self.pipeline.stage_count() {
+            return Err(JsValue::from_str("Pipeline complete: no more stages to execute"));
+        }
+
+        let stage_name = self.pipeline.get_stage_name(self.current_step)
+            .ok_or_else(|| JsValue::from_str("Invalid stage index"))?;
+
+        self.pipeline.execute_stage(self.current_step, &mut self.terrain)
+            .map_err(|e| JsValue::from_str(&format!("Stage '{}' failed: {}", stage_name, e)))?;
+
+        self.current_step += 1;
+        Ok(stage_name.to_string())
+    }
+
+    /// Execute all remaining stages in the pipeline
+    ///
+    /// # Returns
+    /// Number of stages executed
+    #[wasm_bindgen(js_name = executeAllSteps)]
+    pub fn execute_all_steps(&mut self) -> Result<usize, JsValue> {
+        let initial_step = self.current_step;
+        let total_stages = self.pipeline.stage_count();
+
+        while self.current_step < total_stages {
+            self.execute_next_step()?;
+        }
+
+        Ok(total_stages - initial_step)
+    }
+
+    /// Get pipeline execution status
+    ///
+    /// # Returns
+    /// JSON object with: { current: number, total: number, completed: boolean[] }
+    #[wasm_bindgen(js_name = getPipelineStatus)]
+    pub fn get_pipeline_status(&self) -> Result<JsValue, JsValue> {
+        #[derive(Serialize)]
+        struct PipelineStatus {
+            current: usize,
+            total: usize,
+            completed: Vec<bool>,
+            stage_names: Vec<String>,
+        }
+
+        let total = self.pipeline.stage_count();
+        let completed: Vec<bool> = (0..total)
+            .map(|i| i < self.current_step)
+            .collect();
+        
+        let stage_names: Vec<String> = (0..total)
+            .filter_map(|i| self.pipeline.get_stage_name(i).map(|s| s.to_string()))
+            .collect();
+
+        let status = PipelineStatus {
+            current: self.current_step,
+            total,
+            completed,
+            stage_names,
+        };
+
+        serde_wasm_bindgen::to_value(&status)
+            .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
     }
 
     /// Get the generated mesh data
@@ -173,6 +335,18 @@ impl TerrainHandle {
     #[wasm_bindgen(js_name = getSlopeMap)]
     pub fn get_slope_map(&self) -> Option<Vec<f32>> {
         self.terrain.slope_map().map(|m| m.data.clone())
+    }
+
+    /// Get heightmap width (number of columns)
+    #[wasm_bindgen(js_name = getWidth)]
+    pub fn get_width(&self) -> usize {
+        self.terrain.metadata.config.width
+    }
+
+    /// Get heightmap height (number of rows)
+    #[wasm_bindgen(js_name = getHeight)]
+    pub fn get_height(&self) -> usize {
+        self.terrain.metadata.config.height
     }
 
     /// Get terrain statistics

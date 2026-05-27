@@ -118,15 +118,20 @@ pub struct TerrainData {
 impl TerrainData {
     /// Create a new terrain with given configuration
     ///
-    /// The heightmap is initialized to zeros. Pipeline stages will fill it.
+    /// All maps are initialized with default values (zeros).
+    /// Pipeline stages will modify these maps as needed.
     pub fn new(config: TerrainConfig) -> Self {
         let metadata = TerrainMetadata::from_config(config.clone());
         let heightmap = HeightMap::new(config.width, config.height);
         
+        // Initialize all commonly-used maps with default (zero) values
+        // This ensures they're always available, even before their corresponding stages run
+        let slope_map = Some(ScalarMap::new(config.width, config.height));
+        
         Self {
             metadata,
             heightmap,
-            slope_map: None,
+            slope_map,
             flow_direction: None,
             flow_accumulation: None,
             moisture_map: None,

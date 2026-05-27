@@ -1,15 +1,19 @@
 import type { UIComponent } from '../types/ui.types';
 
 /**
- * ViewerCanvas component - Manages the WebGPU canvas
+ * ViewerCanvas component - Manages the WebGPU canvas with optional banner injection
  */
 export class ViewerCanvas implements UIComponent {
     element: HTMLElement;
     private canvas: HTMLCanvasElement;
+    private bannerContainer: HTMLElement;
+    private canvasWrapper: HTMLElement;
 
     constructor() {
         this.element = this.createElement();
         this.canvas = this.element.querySelector('canvas')!;
+        this.bannerContainer = this.element.querySelector('.viewer-banner-container')!;
+        this.canvasWrapper = this.element.querySelector('.viewer-canvas-wrapper')!;
     }
 
     private createElement(): HTMLElement {
@@ -18,10 +22,30 @@ export class ViewerCanvas implements UIComponent {
         container.id = 'canvas-container';
 
         container.innerHTML = `
-            <canvas id="webgpu-canvas"></canvas>
+            <div class="viewer-banner-container"></div>
+            <div class="viewer-canvas-wrapper">
+                <canvas id="webgpu-canvas"></canvas>
+            </div>
         `;
 
         return container;
+    }
+
+    /**
+     * Inject a banner component above the canvas
+     */
+    setBanner(bannerElement: HTMLElement | null): void {
+        this.bannerContainer.innerHTML = '';
+        if (bannerElement) {
+            this.bannerContainer.appendChild(bannerElement);
+        }
+    }
+
+    /**
+     * Clear banner
+     */
+    clearBanner(): void {
+        this.bannerContainer.innerHTML = '';
     }
 
     /**

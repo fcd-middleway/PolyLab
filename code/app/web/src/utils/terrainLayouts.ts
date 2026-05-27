@@ -83,7 +83,7 @@ export function setupHeightmapView(container: HTMLElement, mapData: TerrainMapDa
     container.innerHTML = generate2DMapViewHTML('🗺️ Heightmap', 'heightmap-canvas');
     
     const canvas = document.getElementById('heightmap-canvas') as HTMLCanvasElement;
-    if (!canvas || !mapData.heightmap) {
+    if (!canvas || !mapData.heightmap || mapData.heightmap.length === 0) {
         appLogger.warn('[TerrainLayouts] Missing canvas or heightmap data');
         return;
     }
@@ -125,7 +125,7 @@ export function setupSlopeMapView(container: HTMLElement, mapData: TerrainMapDat
     container.innerHTML = generate2DMapViewHTML('📐 Slope Map', 'slope-canvas');
     
     const canvas = document.getElementById('slope-canvas') as HTMLCanvasElement;
-    if (!canvas || !mapData.slopeMap) {
+    if (!canvas || !mapData.slopeMap || mapData.slopeMap.length === 0) {
         appLogger.warn('[TerrainLayouts] Missing canvas or slope data');
         return;
     }

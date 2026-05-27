@@ -161,6 +161,43 @@ impl Pipeline {
     pub fn stage_names(&self) -> Vec<&str> {
         self.stages.iter().map(|s| s.name()).collect()
     }
+
+    /// Get total number of stages in the pipeline
+    pub fn stage_count(&self) -> usize {
+        self.stages.len()
+    }
+
+    /// Get the name of a specific stage by index
+    ///
+    /// # Arguments
+    /// * `index` - Stage index (0-based)
+    ///
+    /// # Returns
+    /// Some(stage_name) if index is valid, None otherwise
+    pub fn get_stage_name(&self, index: usize) -> Option<&str> {
+        self.stages.get(index).map(|s| s.name())
+    }
+
+    /// Execute a specific stage by index
+    ///
+    /// # Arguments
+    /// * `index` - Stage index (0-based)
+    /// * `terrain` - Terrain data to transform
+    ///
+    /// # Returns
+    /// Ok(()) if stage executed successfully, Err otherwise
+    pub fn execute_stage(&self, index: usize, terrain: &mut TerrainData) -> Result<(), TerrainError> {
+        let stage = self.stages.get(index)
+            .ok_or_else(|| TerrainError::ConfigError(format!("Invalid stage index: {}", index)))?;
+
+        // Check if stage can run
+        stage.can_execute(terrain)?;
+
+        // Execute stage
+        stage.execute(terrain)?;
+
+        Ok(())
+    }
 }
 
 impl Default for Pipeline {

@@ -595,6 +595,163 @@ impl ViewerHandle {
     pub fn center_on_meshes(&mut self) -> bool {
         self.renderer.camera_center_on_meshes()
     }
+    
+    /// Get the point the camera is currently looking at
+    ///
+    /// Returns [x, y, z] as a JavaScript array.
+    /// This is calculated as camera position + forward direction.
+    #[wasm_bindgen]
+    pub fn get_camera_target(&self) -> Vec<f32> {
+        let (x, y, z) = self.renderer.camera_look_at_target();
+        vec![x, y, z]
+    }
+    
+    /// Set camera to look at a specific point
+    ///
+    /// Adjusts camera yaw and pitch to look at the specified target point.
+    #[wasm_bindgen]
+    pub fn set_camera_target(&mut self, x: f32, y: f32, z: f32) {
+        let pos = self.renderer.camera_position();
+        let camera_pos = glam::Vec3::new(pos.0, pos.1, pos.2);
+        let target = glam::Vec3::new(x, y, z);
+        let direction = (target - camera_pos).normalize();
+        
+        // Calculate yaw and pitch from direction vector
+        let yaw = direction.x.atan2(-direction.z);
+        let pitch = direction.y.asin();
+        
+        self.renderer.camera_set_yaw(yaw);
+        self.renderer.camera_set_pitch(pitch);
+    }
+    
+    /// Get camera field of view in degrees
+    #[wasm_bindgen]
+    pub fn get_camera_fov(&self) -> f32 {
+        self.renderer.camera_get_fov()
+    }
+    
+    /// Set camera field of view in degrees
+    ///
+    /// FOV is automatically clamped to 10-120 degrees.
+    #[wasm_bindgen]
+    pub fn set_camera_fov(&mut self, fov: f32) {
+        self.renderer.camera_set_fov(fov);
+    }
+    
+    // ========================
+    // Light Control
+    // ========================
+    
+    /// Get directional light direction
+    ///
+    /// Returns normalized direction vector as [x, y, z]
+    #[wasm_bindgen]
+    pub fn get_light_direction(&self) -> Vec<f32> {
+        let (x, y, z) = self.renderer.light_get_direction();
+        vec![x, y, z]
+    }
+    
+    /// Set directional light direction
+    ///
+    /// Direction vector will be normalized automatically.
+    #[wasm_bindgen]
+    pub fn set_light_direction(&mut self, x: f32, y: f32, z: f32) {
+        self.renderer.light_set_direction(x, y, z);
+    }
+    
+    /// Get directional light color
+    ///
+    /// Returns RGB color as [r, g, b] with values 0.0-1.0
+    #[wasm_bindgen]
+    pub fn get_light_color(&self) -> Vec<f32> {
+        let (r, g, b) = self.renderer.light_get_color();
+        vec![r, g, b]
+    }
+    
+    /// Set directional light color
+    ///
+    /// RGB values should be in range 0.0-1.0 (will be clamped)
+    #[wasm_bindgen]
+    pub fn set_light_color(&mut self, r: f32, g: f32, b: f32) {
+        self.renderer.light_set_color(r, g, b);
+    }
+    
+    /// Get directional light intensity
+    #[wasm_bindgen]
+    pub fn get_light_intensity(&self) -> f32 {
+        self.renderer.light_get_intensity()
+    }
+    
+    /// Set directional light intensity
+    ///
+    /// Intensity is clamped to 0.0-5.0
+    #[wasm_bindgen]
+    pub fn set_light_intensity(&mut self, intensity: f32) {
+        self.renderer.light_set_intensity(intensity);
+    }
+    
+    // ========================
+    // Ambient Light Control
+    // ========================
+    
+    /// Get ambient light color
+    ///
+    /// Returns RGB color as [r, g, b] with values 0.0-1.0
+    #[wasm_bindgen]
+    pub fn get_ambient_color(&self) -> Vec<f32> {
+        let (r, g, b) = self.renderer.ambient_get_color();
+        vec![r, g, b]
+    }
+    
+    /// Set ambient light color
+    ///
+    /// RGB values should be in range 0.0-1.0 (will be clamped)
+    #[wasm_bindgen]
+    pub fn set_ambient_color(&mut self, r: f32, g: f32, b: f32) {
+        self.renderer.ambient_set_color(r, g, b);
+    }
+    
+    /// Get ambient light intensity
+    #[wasm_bindgen]
+    pub fn get_ambient_intensity(&self) -> f32 {
+        self.renderer.ambient_get_intensity()
+    }
+    
+    /// Set ambient light intensity
+    ///
+    /// Intensity is clamped to 0.0-2.0
+    #[wasm_bindgen]
+    pub fn set_ambient_intensity(&mut self, intensity: f32) {
+        self.renderer.ambient_set_intensity(intensity);
+    }
+    
+    // ========================
+    // Scene Statistics
+    // ========================
+    
+    /// Get number of meshes in scene
+    #[wasm_bindgen]
+    pub fn get_mesh_count(&self) -> usize {
+        self.renderer.mesh_count()
+    }
+    
+    /// Get scene bounding box
+    ///
+    /// Returns JSON string with {min: [x,y,z], max: [x,y,z], size: [x,y,z]}
+    /// Returns null if no visible meshes
+    #[wasm_bindgen]
+    pub fn get_scene_bounding_box(&self) -> Option<String> {
+        self.renderer.get_scene_bounding_box()
+            .map(|(min, max, size)| {
+                format!(
+                    r#"{{"min":[{},{},{}],"max":[{},{},{}],"size":[{},{},{}]}}"#,
+                    min.0, min.1, min.2,
+                    max.0, max.1, max.2,
+                    size.0, size.1, size.2
+                )
+            })
+    }
+    
     // ========================
     // Scene Import/Export
     // ========================

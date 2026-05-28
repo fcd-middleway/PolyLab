@@ -20,6 +20,8 @@ struct DirectionalLight {
     intensity: f32,          // Light intensity multiplier
     ambient: f32,            // Ambient light level
     _padding3: vec2<f32>,
+    ambient_color: vec3<f32>, // Ambient light color (RGB)
+    _padding4: f32,
 }
 
 @group(0) @binding(1)
@@ -73,8 +75,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ground_color = vec3<f32>(0.4, 0.35, 0.3); // Warm ground
     let hemisphere = mix(ground_color, sky_color, normal.y * 0.5 + 0.5);
     
-    // Combine hemisphere ambient + directional diffuse
-    let ambient_contribution = light.ambient * hemisphere;
+    // Combine ambient + directional diffuse
+    // Ambient uses custom color instead of hemisphere
+    let ambient_contribution = light.ambient * light.ambient_color * hemisphere;
     let diffuse_contribution = diffuse * light.intensity * light.color;
     let lighting = ambient_contribution + diffuse_contribution;
     

@@ -18,6 +18,7 @@
     --text-secondary: #aaa;
     --accent-color: #4a9eff;
     --accent-hover: #6bb0ff;
+    --accent-dark: #3b8ee0;
     --shadow: rgba(0, 0, 0, 0.5);
     --canvas-bg: #0a0a0a;
 }
@@ -32,6 +33,7 @@
     --text-secondary: #666666;
     --accent-color: #4a9eff;
     --accent-hover: #6bb0ff;
+    --accent-dark: #3b8ee0;
     --shadow: rgba(0, 0, 0, 0.15);
     --canvas-bg: #fafaf8;
 }

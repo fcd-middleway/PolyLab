@@ -11,10 +11,10 @@ import { TreeView } from './TreeView';
 export class ScenePanel implements UIComponent {
     element: HTMLElement;
     private treeView: TreeView;
-    private sceneRoot: SceneNode;
-    private meshesFolder: SceneNode;
-    private camerasFolder: SceneNode;
-    private lightsFolder: SceneNode;
+    private sceneRoot!: SceneNode;
+    private meshesFolder!: SceneNode;
+    private camerasFolder!: SceneNode;
+    private lightsFolder!: SceneNode;
     private visibilityCallback: ((id: string, visible: boolean) => void) | null = null;
     private selectionCallback: ((node: SceneNode) => void) | null = null;
     private isCollapsed: boolean = false;
@@ -92,12 +92,27 @@ export class ScenePanel implements UIComponent {
             name: 'Directional Light',
             icon: '☀️',
             metadata: {
+                lightType: 'directional',
                 direction: [0.3, -0.8, -0.5],
                 color: [1.0, 1.0, 1.0],
                 intensity: 1.0
             }
         };
         this.lightsFolder.children!.push(directionalLight);
+
+        // Add Ambient Light
+        const ambientLight: SceneNode = {
+            id: 'ambient-light',
+            type: 'light',
+            name: 'Ambient Light',
+            icon: '💡',
+            metadata: {
+                lightType: 'ambient',
+                color: [0.8, 0.85, 0.9],
+                intensity: 0.3
+            }
+        };
+        this.lightsFolder.children!.push(ambientLight);
 
         // Add folders to root
         this.sceneRoot.children!.push(this.meshesFolder);
@@ -249,6 +264,13 @@ export class ScenePanel implements UIComponent {
      */
     getSelectedNode(): SceneNode | null {
         return this.treeView.getSelectedNode();
+    }
+
+    /**
+     * Clear the current selection
+     */
+    clearSelection(): void {
+        this.treeView.clearSelection();
     }
 
     render(): void {

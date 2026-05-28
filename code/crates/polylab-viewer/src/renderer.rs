@@ -268,6 +268,11 @@ impl Renderer {
         self.meshes.remove(id);
     }
 
+    /// Get total number of meshes in scene
+    pub fn mesh_count(&self) -> usize {
+        self.meshes.len()
+    }
+
     /// Get the total vertex and triangle count across all visible meshes
     ///
     /// Returns (vertex_count, triangle_count) for display in UI.
@@ -711,6 +716,22 @@ impl Renderer {
         self.camera.set_orbit_target(Vec3::ZERO);
     }
     
+    /// Get the point the camera is looking at (position + forward direction)
+    pub fn camera_look_at_target(&self) -> (f32, f32, f32) {
+        let target = self.camera.look_at_target();
+        (target.x, target.y, target.z)
+    }
+    
+    /// Get camera field of view in degrees
+    pub fn camera_get_fov(&self) -> f32 {
+        self.camera.fov()
+    }
+    
+    /// Set camera field of view in degrees (clamped to 10-120)
+    pub fn camera_set_fov(&mut self, fov: f32) {
+        self.camera.set_fov(fov);
+    }
+    
     /// Center camera on all visible meshes in the scene
     ///
     /// Calculates bounding box of all visible meshes, positions camera to view them all,
@@ -765,6 +786,140 @@ impl Renderer {
         self.camera.set_pitch(0.0);
         
         true
+    }
+    
+    /// Get scene bounding box (min, max, size) for all visible meshes
+    ///
+    /// Returns None if no visible meshes exist.
+    /// Returns (min, max, size) as tuples of (x, y, z).
+    pub fn get_scene_bounding_box(&self) -> Option<((f32, f32, f32), (f32, f32, f32), (f32, f32, f32))> {
+        let mut global_min = None;
+        let mut global_max = None;
+        
+        for entry in self.meshes.values() {
+            if !entry.visible {
+                continue;
+            }
+            
+            if let Some((mesh_min, mesh_max)) = entry.cpu_mesh.bounding_box() {
+                match (global_min, global_max) {
+                    (None, None) => {
+                        global_min = Some(mesh_min);
+                        global_max = Some(mesh_max);
+                    }
+                    (Some(gmin), Some(gmax)) => {
+                        global_min = Some(gmin.min(mesh_min));
+                        global_max = Some(gmax.max(mesh_max));
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+        
+        match (global_min, global_max) {
+            (Some(min), Some(max)) => {
+                let size = max - min;
+                Some((
+                    (min.x, min.y, min.z),
+                    (max.x, max.y, max.z),
+                    (size.x, size.y, size.z),
+                ))
+            }
+            _ => None,
+        }
+    }
+    
+    // ===== Light Control Methods =====
+    
+    /// Get light direction (normalized)
+    pub fn light_get_direction(&self) -> (f32, f32, f32) {
+        let dir = self.light.direction;
+        (dir.x, dir.y, dir.z)
+    }
+    
+    /// Set light direction (will be normalized automatically)
+    pub fn light_set_direction(&mut self, x: f32, y: f32, z: f32) {
+        self.light.direction = Vec3::new(x, y, z).normalize();
+        // Update GPU buffer
+        self.context.queue.write_buffer(
+            &self.light_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.light]),
+        );
+    }
+    
+    /// Get light color (RGB 0.0-1.0)
+    pub fn light_get_color(&self) -> (f32, f32, f32) {
+        let col = self.light.color;
+        (col.x, col.y, col.z)
+    }
+    
+    /// Set light color (RGB 0.0-1.0)
+    pub fn light_set_color(&mut self, r: f32, g: f32, b: f32) {
+        self.light.color = Vec3::new(
+            r.clamp(0.0, 1.0),
+            g.clamp(0.0, 1.0),
+            b.clamp(0.0, 1.0),
+        );
+        // Update GPU buffer
+        self.context.queue.write_buffer(
+            &self.light_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.light]),
+        );
+    }
+    
+    /// Get light intensity
+    pub fn light_get_intensity(&self) -> f32 {
+        self.light.intensity
+    }
+    
+    /// Set light intensity (clamped to 0.0-5.0)
+    pub fn light_set_intensity(&mut self, intensity: f32) {
+        self.light.intensity = intensity.clamp(0.0, 5.0);
+        // Update GPU buffer
+        self.context.queue.write_buffer(
+            &self.light_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.light]),
+        );
+    }
+    
+    /// Get ambient light color (RGB 0.0-1.0)
+    pub fn ambient_get_color(&self) -> (f32, f32, f32) {
+        let col = self.light.ambient_color;
+        (col.x, col.y, col.z)
+    }
+    
+    /// Set ambient light color (RGB 0.0-1.0)
+    pub fn ambient_set_color(&mut self, r: f32, g: f32, b: f32) {
+        self.light.ambient_color = Vec3::new(
+            r.clamp(0.0, 1.0),
+            g.clamp(0.0, 1.0),
+            b.clamp(0.0, 1.0),
+        );
+        // Update GPU buffer
+        self.context.queue.write_buffer(
+            &self.light_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.light]),
+        );
+    }
+    
+    /// Get ambient light intensity
+    pub fn ambient_get_intensity(&self) -> f32 {
+        self.light.ambient
+    }
+    
+    /// Set ambient light intensity (clamped to 0.0-2.0)
+    pub fn ambient_set_intensity(&mut self, intensity: f32) {
+        self.light.ambient = intensity.clamp(0.0, 2.0);
+        // Update GPU buffer
+        self.context.queue.write_buffer(
+            &self.light_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.light]),
+        );
     }
     
     /// Render a frame with a custom view-projection matrix

@@ -522,6 +522,13 @@
 .tree-node-header.selected {
     background: var(--accent-color);
     color: white;
+    border-left: 3px solid var(--accent-light);
+    padding-left: 5px;
+    box-shadow: 0 0 0 1px var(--accent-color);
+}
+
+.tree-node-header.selected .tree-node-icon {
+    filter: brightness(1.2);
 }
 
 .tree-node-expand {
@@ -576,4 +583,299 @@
     /* Children are indented via padding-left on each node */
 }
 
+/* ===================================
+   Scene Element Properties
+   =================================== */
+
+.scene-element-properties {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.property-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.property-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: all 0.2s ease;
+}
+
+.property-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.property-icon {
+    font-size: 18px;
+}
+
+.property-type {
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.property-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.property-value {
+    font-size: 13px;
+    color: var(--text-primary);
+    padding: 6px 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.property-value.property-readonly {
+    color: var(--text-secondary);
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.property-input {
+    font-size: 13px;
+    color: var(--text-primary);
+    padding: 6px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.property-input:focus {
+    border-color: var(--accent-color);
+    background: var(--bg-primary);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.property-input:invalid,
+.property-input.error {
+    border-color: #ef4444;
+}
+
+.property-input:invalid:focus,
+.property-input.error:focus {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
+}
+
+.property-input-small {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Vector3 Input Group */
+.property-vector3 {
+    display: flex;
+    gap: 6px;
+}
+
+/* Slider */
+.property-slider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.property-range {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    outline: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+.property-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.property-range::-webkit-slider-thumb:hover {
+    background: var(--accent-dark);
+    transform: scale(1.1);
+}
+
+.property-range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+}
+
+.property-range::-moz-range-thumb:hover {
+    background: var(--accent-dark);
+    transform: scale(1.1);
+}
+
+.property-slider-value {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+    min-width: 40px;
+    text-align: right;
+}
+
+/* Toggle Switch */
+.property-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-tertiary);
+    transition: 0.3s;
+    border-radius: 24px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--accent-color);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(20px);
+}
+
+.toggle-label {
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+/* Property Actions */
+.property-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.property-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.property-btn-primary {
+    background: var(--accent-color);
+    color: white;
+}
+
+.property-btn-primary:hover {
+    background: var(--accent-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+.property-btn-danger {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.property-btn-danger:hover {
+    background: #dc3545;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.property-btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.property-btn-secondary:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    transform: translateY(-1px);
+}
+
+.btn-icon {
+    font-size: 14px;
+}
 

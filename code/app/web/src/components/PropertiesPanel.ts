@@ -32,6 +32,78 @@ export class PropertiesPanel implements UIComponent {
     }
 
     /**
+     * Set custom content as main panel content (replaces Details/Settings sections)
+     */
+    setMainContent(content: HTMLElement | string): void {
+        const panelContent = this.element.querySelector('.panel-content');
+        if (panelContent) {
+            if (typeof content === 'string') {
+                panelContent.innerHTML = content;
+            } else {
+                panelContent.innerHTML = '';
+                panelContent.appendChild(content);
+            }
+        }
+    }
+
+    /**
+     * Restore default Details/Settings sections
+     */
+    restoreDefaultContent(): void {
+        const panelContent = this.element.querySelector('.panel-content');
+        if (panelContent) {
+            panelContent.innerHTML = `
+                <!-- Details Section -->
+                <div class="panel-section details-section">
+                    <div class="section-header">
+                        <h4>Details</h4>
+                        <button class="section-collapse-btn" data-section="details" title="Toggle section">
+                            <span class="collapse-icon">▼</span>
+                        </button>
+                    </div>
+                    <div class="section-content" id="details-content">
+                        <div class="detail-row">
+                            <span class="detail-label">Vertices:</span>
+                            <span class="detail-value" id="detail-vertices">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Triangles:</span>
+                            <span class="detail-value" id="detail-triangles">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Size X:</span>
+                            <span class="detail-value" id="detail-size-x">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Size Y:</span>
+                            <span class="detail-value" id="detail-size-y">-</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Size Z:</span>
+                            <span class="detail-value" id="detail-size-z">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Section (hidden by default) -->
+                <div class="panel-section settings-section" style="display: none;">
+                    <div class="section-header">
+                        <h4>Settings</h4>
+                        <button class="section-collapse-btn" data-section="settings" title="Toggle section">
+                            <span class="collapse-icon">▼</span>
+                        </button>
+                    </div>
+                    <div class="section-content" id="settings-content">
+                        <div class="empty-state">No settings available</div>
+                    </div>
+                </div>
+            `;
+            // Reattach event listeners for section collapse buttons
+            this.attachSectionListeners();
+        }
+    }
+
+    /**
      * Set custom content for the Settings section
      */
     setSettingsContent(content: HTMLElement | string): void {
@@ -169,6 +241,13 @@ export class PropertiesPanel implements UIComponent {
         collapseBtn?.addEventListener('click', () => this.toggle());
 
         // Section collapse buttons
+        this.attachSectionListeners();
+    }
+
+    /**
+     * Attach event listeners to section collapse buttons
+     */
+    private attachSectionListeners(): void {
         const sectionButtons = this.element.querySelectorAll('.section-collapse-btn');
         sectionButtons.forEach(btn => {
             btn.addEventListener('click', (e) => {

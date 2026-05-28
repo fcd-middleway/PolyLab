@@ -175,6 +175,21 @@ impl Camera {
         self.orbit_target
     }
     
+    /// Get the point the camera is looking at (position + forward direction)
+    pub fn look_at_target(&self) -> Vec3 {
+        self.position + self.forward()
+    }
+    
+    /// Get field of view in degrees
+    pub fn fov(&self) -> f32 {
+        self.fov
+    }
+    
+    /// Set field of view in degrees
+    pub fn set_fov(&mut self, fov: f32) {
+        self.fov = fov.clamp(10.0, 120.0);
+    }
+    
     /// Orbit around the target point (spherical rotation)
     ///
     /// Rotates the camera around orbit_target while maintaining distance.

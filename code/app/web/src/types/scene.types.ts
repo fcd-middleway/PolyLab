@@ -37,9 +37,20 @@ export interface SceneNodeMetadata {
     fov?: number;
     
     // Light-specific (for later)
+    lightType?: 'directional' | 'ambient';
     direction?: [number, number, number];
     color?: [number, number, number];
     intensity?: number;
+    
+    // Scene Root-specific
+    meshCount?: number;
+    cameraCount?: number;
+    lightCount?: number;
+    boundingBox?: {
+        min: [number, number, number];
+        max: [number, number, number];
+        size: [number, number, number];
+    };
 }
 
 /**

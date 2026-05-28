@@ -270,6 +270,14 @@ export class TreeView {
         return this.findNode(this.rootNode, this.selectedNodeId);
     }
 
+    /**
+     * Clear the current selection
+     */
+    clearSelection(): void {
+        this.selectedNodeId = null;
+        this.render();
+    }
+
     destroy(): void {
         this.element.remove();
     }

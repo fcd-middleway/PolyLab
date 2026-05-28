@@ -36,7 +36,8 @@ impl SimpleVertex {
 pub fn create_render_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
-    bind_group_layout: &wgpu::BindGroupLayout,
+    view_bind_group_layout: &wgpu::BindGroupLayout,
+    model_bind_group_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
     // Shader module - compiled WGSL code
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -45,10 +46,11 @@ pub fn create_render_pipeline(
     });
 
     // Pipeline layout - defines bind groups (uniforms, textures)
-    // Now includes view uniforms for aspect ratio
+    // Group 0: view-projection + light
+    // Group 1: per-mesh model matrix
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Render Pipeline Layout"),
-        bind_group_layouts: &[Some(bind_group_layout)],
+        bind_group_layouts: &[Some(view_bind_group_layout), Some(model_bind_group_layout)],
         immediate_size: 0,
     });
 
@@ -108,7 +110,8 @@ pub fn create_render_pipeline(
 pub fn create_wireframe_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
-    bind_group_layout: &wgpu::BindGroupLayout,
+    view_bind_group_layout: &wgpu::BindGroupLayout,
+    model_bind_group_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Wireframe Shader"),
@@ -117,7 +120,7 @@ pub fn create_wireframe_pipeline(
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Wireframe Pipeline Layout"),
-        bind_group_layouts: &[Some(bind_group_layout)],
+        bind_group_layouts: &[Some(view_bind_group_layout), Some(model_bind_group_layout)],
         immediate_size: 0,
     });
 
@@ -173,7 +176,8 @@ pub fn create_wireframe_pipeline(
 pub fn create_vertices_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
-    bind_group_layout: &wgpu::BindGroupLayout,
+    view_bind_group_layout: &wgpu::BindGroupLayout,
+    model_bind_group_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Vertices Shader"),
@@ -182,7 +186,7 @@ pub fn create_vertices_pipeline(
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Vertices Pipeline Layout"),
-        bind_group_layouts: &[Some(bind_group_layout)],
+        bind_group_layouts: &[Some(view_bind_group_layout), Some(model_bind_group_layout)],
         immediate_size: 0,
     });
 

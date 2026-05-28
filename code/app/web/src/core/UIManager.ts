@@ -166,6 +166,11 @@ export class UIManager {
         // Set MODE section actions (project-specific)
         this.toolbar.setModeActions(config.toolbarActions);
 
+        // Set LAYOUT section actions (project-specific)
+        if (config.layoutActions && config.layoutActions.length > 0) {
+            this.toolbar.setLayoutActions(config.layoutActions);
+        }
+
         // Configure panels with titles from config
         this.configurePanels(config.panels);
 

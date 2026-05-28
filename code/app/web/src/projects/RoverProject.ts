@@ -24,6 +24,7 @@ export class RoverProject extends BaseProject {
     // Layout management
     private layoutManager: LayoutManager | null = null;
     private currentViewMode: ViewMode = 'scene';
+    private viewModeBadge: HTMLElement | null = null;
     
     // Stereo viewers for dual-camera mode
     private leftViewer: any | null = null;
@@ -37,6 +38,15 @@ export class RoverProject extends BaseProject {
     // Camera parameters
     private readonly cameraBaseline = 0.3; // Distance between left/right cameras (meters)
     private readonly cameraFOV = 60; // Field of view (degrees)
+    
+    // Rover controls
+    private keyboardHandler: ((e: KeyboardEvent) => void) | null = null;
+    private canvasKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+    private cameraControls: any | null = null; // Reference to global CameraControls to disable in Rover mode
+    private keysPressed: Set<string> = new Set();
+    private readonly moveSpeed = 2; // m/s
+    private readonly rotateSpeed = 0.1; // rad/s
+    private roverMeshContent: string = ''; // Store OBJ content for initial mesh load
 
     getId(): string {
         return 'rover';
@@ -135,6 +145,14 @@ export class RoverProject extends BaseProject {
         this.detailsPanel = detailsPanel;
     }
 
+    /**
+     * Set camera controls reference
+     * Called by main.ts to allow disabling global camera controls in Rover mode
+     */
+    setCameraControls(cameraControls: any): void {
+        this.cameraControls = cameraControls;
+    }
+
     async init(viewer: any): Promise<void> {
         appLogger.info('Initializing Rover project...');
         this.viewer = viewer;
@@ -157,10 +175,39 @@ export class RoverProject extends BaseProject {
             });
         }
         
+        // Initialize rover WASM module
+        await this.initRover();
+        
         // Load initial scene
         await this.loadInitialScene();
         
+        // Set initial camera position (3rd person behind rover)
+        this.updateCamera3rdPerson();
+        
         appLogger.info('Rover project ready - use arrow keys to navigate');
+    }
+    
+    /**
+     * Initialize rover WASM module
+     */
+    private async initRover(): Promise<void> {
+        try {
+            // @ts-ignore - WASM module from relative path
+            const roverModule = await import('../../../../crates/polylab-rover/pkg/polylab_rover.js');
+            await roverModule.default();
+            
+            // Create rover at initial position (0, 0, -10) facing +Z
+            appLogger.debug('Creating rover at (0, 0, -10)...');
+            this.rover = roverModule.RoverHandle.at_position(0, 0, -10);
+            this.rover.set_orientation(Math.PI, 0);
+            this.rover.set_stereo_baseline(this.cameraBaseline);
+            this.rover.set_eye_height(0.8); // Wall-E's eyes
+            
+            appLogger.debug(`Rover initialized: pos=(0, 0, -10), yaw=${(Math.PI/2).toFixed(2)} rad (facing +Z)`);
+        } catch (error) {
+            appLogger.error('Failed to initialize rover WASM module', error);
+            throw error;
+        }
     }
 
     /**
@@ -224,9 +271,45 @@ export class RoverProject extends BaseProject {
     }
 
     update(deltaTime: number): void {
-        // TODO: Update rover position based on keyboard input
-        // TODO: Update stereo camera positions/orientations
-        // TODO: Capture frames if in continuous mode
+        // Update rover position based on keyboard input
+        if (this.rover && this.keysPressed.size > 0) {
+            // deltaTime is already in seconds (from main.ts animation loop)
+            let moved = false;
+            
+            // Forward/Backward
+            if (this.keysPressed.has('ArrowUp')) {
+                this.rover.move_forward(this.moveSpeed * deltaTime);
+                moved = true;
+            }
+            if (this.keysPressed.has('ArrowDown')) {
+                this.rover.move_forward(-this.moveSpeed * deltaTime);
+                moved = true;
+            }
+            
+            // Rotation
+            if (this.keysPressed.has('ArrowLeft')) {
+                this.rover.rotate(this.rotateSpeed * deltaTime);
+                moved = true;
+            }
+            if (this.keysPressed.has('ArrowRight')) {
+                this.rover.rotate(-this.rotateSpeed * deltaTime);
+                moved = true;
+            }
+            
+            if (moved) {
+                // Update camera to follow rover (3rd person view)
+                this.updateCamera3rdPerson();
+                
+                // Update rover mesh visual position (GPU-based, very fast)
+                this.updateRoverMeshTransform();
+                
+                // Update rover info in details panel
+                this.updateRoverInfo();
+                
+                // Update stereo cameras info in Properties Panel
+                this.updateStereoCamerasInfo();
+            }
+        }
     }
 
     cleanup(): void {
@@ -247,10 +330,19 @@ export class RoverProject extends BaseProject {
     onActivate(): void {
         appLogger.debug('Rover project activated');
         
+        // Create view mode badge
+        this.createViewModeBadge();
+        
+        // Disable global camera controls (they conflict with rover movement)
+        if (this.cameraControls) {
+            this.cameraControls.disable();
+            appLogger.info('Global camera controls disabled for Rover mode');
+        }
+        
         // Update status bar
         if (this.statusBar) {
             this.statusBar.updateStats({ 
-                status: '🤖 Rover Vision - Ready to explore'
+                status: '🤖 Rover Vision - Use arrow keys to move'
             });
         }
         
@@ -263,10 +355,79 @@ export class RoverProject extends BaseProject {
         if (this.detailsPanel) {
             this.detailsPanel.clearSettings();
         }
+        
+        // Show stereo cameras properties in Properties Panel
+        this.showStereoCamerasProperties();
+        
+        // Setup keyboard controls for rover
+        this.keyboardHandler = (e: KeyboardEvent) => {
+            // Only handle arrow keys
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (e.type === 'keydown') {
+                    this.keysPressed.add(e.key);
+                } else if (e.type === 'keyup') {
+                    this.keysPressed.delete(e.key);
+                }
+            }
+        };
+        
+        // Use capture phase to intercept events before they reach the viewer
+        document.addEventListener('keydown', this.keyboardHandler, true);
+        document.addEventListener('keyup', this.keyboardHandler, true);
+        
+        // Also block default behavior on canvas to prevent scroll/navigation
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+            this.canvasKeyHandler = (e: KeyboardEvent) => {
+                if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            };
+            canvas.addEventListener('keydown', this.canvasKeyHandler, true);
+            canvas.addEventListener('keyup', this.canvasKeyHandler, true);
+            canvas.tabIndex = 0; // Make canvas focusable
+            appLogger.debug('Canvas keyboard blocker installed');
+        }
+        
+        appLogger.info('Rover controls active - Arrow keys to move');
     }
 
     onDeactivate(): void {
         appLogger.debug('Rover project deactivated');
+        
+        // Remove view mode badge
+        if (this.viewModeBadge) {
+            this.viewModeBadge.remove();
+            this.viewModeBadge = null;
+        }
+        
+        // Re-enable global camera controls
+        if (this.cameraControls) {
+            this.cameraControls.enable();
+            appLogger.info('Global camera controls re-enabled');
+        }
+        
+        // Remove keyboard handler
+        if (this.keyboardHandler) {
+            document.removeEventListener('keydown', this.keyboardHandler, true);
+            document.removeEventListener('keyup', this.keyboardHandler, true);
+            this.keyboardHandler = null;
+        }
+                // Remove canvas keyboard blocker
+        if (this.canvasKeyHandler) {
+            const canvas = document.querySelector('canvas');
+            if (canvas) {
+                canvas.removeEventListener('keydown', this.canvasKeyHandler, true);
+                canvas.removeEventListener('keyup', this.canvasKeyHandler, true);
+            }
+            this.canvasKeyHandler = null;
+        }
+                // Clear pressed keys
+        this.keysPressed.clear();
         
         // Clear Settings section when deactivating
         if (this.detailsPanel) {
@@ -283,7 +444,10 @@ export class RoverProject extends BaseProject {
         if (this.rover) {
             // Reset WASM rover to initial stereo position
             this.rover.set_position(0, 0, -10);
-            this.rover.set_orientation(-Math.PI / 2, 0); // Facing +Z
+            this.rover.set_orientation(Math.PI / 2, 0); // 90° yaw (facing +Z), 0° pitch
+            
+            // Reset visual mesh (disabled - too slow)
+            // this.updateRoverMeshTransform();
         }
         
         this.updateRoverInfo();
@@ -378,6 +542,9 @@ export class RoverProject extends BaseProject {
         
         this.currentViewMode = mode;
         
+        // Update view mode badge
+        this.updateViewModeBadge(mode);
+        
         // Update status bar
         const modeNames: Record<ViewMode, string> = {
             'scene': '🎬 Scene Explorer',
@@ -394,9 +561,266 @@ export class RoverProject extends BaseProject {
         }
     }
 
+    /**
+     * Create view mode badge overlay
+     */
+    private createViewModeBadge(): void {
+        const canvasWrapper = document.querySelector('.viewer-canvas-wrapper');
+        if (!canvasWrapper) {
+            appLogger.error('[RoverProject] Canvas wrapper not found');
+            return;
+        }
+        
+        // Remove existing badge if any
+        const existingBadge = canvasWrapper.querySelector('.view-mode-badge');
+        if (existingBadge) {
+            existingBadge.remove();
+        }
+        
+        // Create new badge
+        this.viewModeBadge = document.createElement('div');
+        this.viewModeBadge.className = 'view-mode-badge';
+        canvasWrapper.appendChild(this.viewModeBadge);
+        
+        // Initial update
+        this.updateViewModeBadge(this.currentViewMode);
+    }
+
+    /**
+     * Update view mode badge content
+     */
+    private updateViewModeBadge(mode: ViewMode): void {
+        if (!this.viewModeBadge) {
+            this.createViewModeBadge();
+            if (!this.viewModeBadge) return; // Failed to create
+        }
+        
+        const modeInfo: Record<ViewMode, { icon: string; label: string }> = {
+            'scene': { icon: '🎬', label: 'Scene Explorer' },
+            'stereo': { icon: '👁️', label: 'Stereo Vision' },
+            'depth': { icon: '🔬', label: 'Depth Analysis' },
+            'full-grid': { icon: '🎯', label: 'Full Grid' },
+            'point-cloud': { icon: '🎨', label: 'Point Cloud' }
+        };
+        
+        const info = modeInfo[mode];
+        this.viewModeBadge.innerHTML = `
+            <span class="icon">${info.icon}</span>
+            <span class="label">${info.label}</span>
+        `;
+    }
+
     // ========================
     // Stereo Vision Management
     // ========================
+
+    /**
+     * Update stereo cameras info in Properties Panel
+     */
+    private updateStereoCamerasInfo(): void {
+        if (!this.detailsPanel || !this.rover) return;
+
+        // This will be called when rover moves to update the displayed camera info
+        // For now, just trigger a redraw of the camera properties if they're visible
+        this.showStereoCamerasProperties();
+    }
+
+    /**
+     * Show stereo cameras properties in Properties Panel (editable)
+     */
+    private showStereoCamerasProperties(): void {
+        if (!this.detailsPanel || !this.rover) return;
+
+        // Get current camera positions from rover
+        const leftPos = this.rover.get_left_camera_position();
+        const rightPos = this.rover.get_right_camera_position();
+        const roverPos = this.rover.get_position();
+        const yaw = this.rover.get_yaw();
+        const pitch = this.rover.get_pitch();
+        const baseline = this.rover.get_stereo_baseline();
+        const eyeHeight = this.rover.get_eye_height();
+
+        // Calculate target point (where cameras are looking)
+        const lookDistance = 5.0;
+        const targetX = roverPos[0] + Math.sin(yaw) * Math.cos(pitch) * lookDistance;
+        const targetY = roverPos[1] + Math.sin(pitch) * lookDistance;
+        const targetZ = roverPos[2] + Math.cos(yaw) * Math.cos(pitch) * lookDistance;
+
+        // Create editable properties HTML
+        const propertiesHTML = `
+            <div class="stereo-cameras-properties" style="padding: 16px;">
+                <h2 style="margin-top: 0; color: var(--accent-color);">📹 Stereo Cameras</h2>
+                
+                <!-- LEFT CAMERA -->
+                <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; color: var(--text-primary);">⬅️ Left Camera</h3>
+                    
+                    <div style="margin-bottom: 8px;">
+                        <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Position</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                            <div>
+                                <label style="font-size: 10px; color: var(--text-secondary);">X (m)</label>
+                                <input type="number" step="0.01" value="${leftPos[0].toFixed(3)}" readonly 
+                                       style="width: 100%; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            </div>
+                            <div>
+                                <label style="font-size: 10px; color: var(--text-secondary);">Y (m)</label>
+                                <input type="number" step="0.01" value="${leftPos[1].toFixed(3)}" readonly
+                                       style="width: 100%; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            </div>
+                            <div>
+                                <label style="font-size: 10px; color: var(--text-secondary);">Z (m)</label>
+                                <input type="number" step="0.01" value="${leftPos[2].toFixed(3)}" readonly
+                                       style="width: 100%; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT CAMERA -->
+                <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; color: var(--text-primary);">➡️ Right Camera</h3>
+                    
+                    <div style="margin-bottom: 8px;">
+                        <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Position</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                            <div>
+                                <label style="font-size: 10px; color: var(--text-secondary);">X (m)</label>
+                                <input type="number" step="0.01" value="${rightPos[0].toFixed(3)}" readonly
+                                       style="width: 100%; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            </div>
+                            <div>
+                                <label style="font-size: 10px; color: var(--text-secondary);">Y (m)</label>
+                                <input type="number" step="0.01" value="${rightPos[1].toFixed(3)}" readonly
+                                       style="width: 100%; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            </div>
+                            <div>
+                                <label style="font-size: 10px; color: var(--text-secondary);">Z (m)</label>
+                                <input type="number" step="0.01" value="${rightPos[2].toFixed(3)}" readonly
+                                       style="width: 100%; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- EDITABLE PARAMETERS -->
+                <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; color: var(--text-primary);">⚙️ Camera Parameters</h3>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Baseline (m)</label>
+                        <input type="number" id="rover-baseline-input" step="0.01" value="${baseline.toFixed(3)}" 
+                               style="width: 100%; padding: 6px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                        <p style="margin: 4px 0 0 0; font-size: 10px; color: var(--text-secondary);">Distance between left and right cameras</p>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Eye Height (m)</label>
+                        <input type="number" id="rover-eyeheight-input" step="0.01" value="${eyeHeight.toFixed(3)}" 
+                               style="width: 100%; padding: 6px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);">
+                        <p style="margin: 4px 0 0 0; font-size: 10px; color: var(--text-secondary);">Height of cameras above rover center</p>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Field of View (°)</label>
+                        <input type="number" id="rover-fov-input" step="1" value="${this.cameraFOV}" readonly
+                               style="width: 100%; padding: 6px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); opacity: 0.6;">
+                        <p style="margin: 4px 0 0 0; font-size: 10px; color: var(--text-secondary);">Camera field of view (not editable yet)</p>
+                    </div>
+
+                    <button id="rover-apply-params-btn" 
+                            style="width: 100%; padding: 10px; background: var(--accent-color); border: 1px solid var(--accent-color); border-radius: 4px; color: var(--text-primary); font-weight: 600; cursor: pointer;">
+                        Apply Changes
+                    </button>
+                </div>
+
+                <!-- TARGET INFO -->
+                <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 4px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; color: var(--text-primary);">🎯 Look Target</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                        <div>
+                            <label style="font-size: 10px; color: var(--text-secondary);">X (m)</label>
+                            <input type="number" value="${targetX.toFixed(3)}" readonly
+                                   style="width: 100%; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); opacity: 0.6;">
+                        </div>
+                        <div>
+                            <label style="font-size: 10px; color: var(--text-secondary);">Y (m)</label>
+                            <input type="number" value="${targetY.toFixed(3)}" readonly
+                                   style="width: 100%; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); opacity: 0.6;">
+                        </div>
+                        <div>
+                            <label style="font-size: 10px; color: var(--text-secondary);">Z (m)</label>
+                            <input type="number" value="${targetZ.toFixed(3)}" readonly
+                                   style="width: 100%; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); opacity: 0.6;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 16px; padding: 12px; background: rgba(74, 158, 255, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-color);">
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">
+                        💡 <strong>Tip:</strong> Adjust baseline and eye height, then click "Apply Changes" to update the cameras. Move the rover with arrow keys to see the effect.
+                    </p>
+                </div>
+            </div>
+        `;
+
+        // Set the HTML in the panel content
+        const mainContent = this.detailsPanel.element.querySelector('.panel-content');
+        if (mainContent) {
+            mainContent.innerHTML = propertiesHTML;
+
+            // Attach event listener to Apply button
+            const applyBtn = document.getElementById('rover-apply-params-btn');
+            if (applyBtn) {
+                applyBtn.addEventListener('click', () => this.applyCameraParameters());
+            }
+        }
+    }
+
+    /**
+     * Apply camera parameter changes to rover
+     */
+    private applyCameraParameters(): void {
+        if (!this.rover) return;
+
+        // Get values from inputs
+        const baselineInput = document.getElementById('rover-baseline-input') as HTMLInputElement;
+        const eyeHeightInput = document.getElementById('rover-eyeheight-input') as HTMLInputElement;
+
+        if (baselineInput && eyeHeightInput) {
+            const newBaseline = parseFloat(baselineInput.value);
+            const newEyeHeight = parseFloat(eyeHeightInput.value);
+
+            // Validate inputs
+            if (isNaN(newBaseline) || isNaN(newEyeHeight)) {
+                appLogger.error('[RoverProject] Invalid camera parameters');
+                return;
+            }
+
+            // Apply to rover
+            this.rover.set_stereo_baseline(newBaseline);
+            this.rover.set_eye_height(newEyeHeight);
+
+            // Update local cache
+            // Note: cameraBaseline is readonly, but we can override it for display
+            (this as any).cameraBaseline = newBaseline;
+
+            appLogger.info('[RoverProject] Camera parameters updated', { 
+                baseline: newBaseline, 
+                eyeHeight: newEyeHeight 
+            });
+
+            // Refresh the properties display
+            this.showStereoCamerasProperties();
+
+            // Update status bar
+            if (this.statusBar) {
+                this.statusBar.updateStats({ 
+                    status: `📹 Camera params updated: baseline=${newBaseline.toFixed(2)}m, height=${newEyeHeight.toFixed(2)}m`
+                });
+            }
+        }
+    }
 
     /**
      * Initialize left and right viewers for stereo mode
@@ -414,11 +838,11 @@ export class RoverProject extends BaseProject {
         // Create rover at Wall-E position (0, 0, -10) facing +Z
         appLogger.debug('Creating rover...');
         this.rover = roverModule.RoverHandle.at_position(0, 0, -10);
-        this.rover.set_orientation(-Math.PI / 2, 0); // -90° yaw (facing +Z), 0° pitch
+        this.rover.set_orientation(Math.PI / 2, 0); // 90° yaw (facing +Z), 0° pitch
         this.rover.set_stereo_baseline(this.cameraBaseline);
         this.rover.set_eye_height(0.8); // Wall-E's eyes
         
-        appLogger.debug(`Rover created at position (0, 0, -10) with yaw=${(-Math.PI/2).toFixed(2)} rad`);
+        appLogger.debug(`Rover created at position (0, 0, -10) with yaw=${(Math.PI/2).toFixed(2)} rad (facing +Z)`);
         
         // Create left viewer
         appLogger.debug('Creating left viewer...');
@@ -445,10 +869,10 @@ export class RoverProject extends BaseProject {
         const planeObj = await planeResponse.text();
         viewer.load_mesh_at('ground-plane', planeObj, 0, 0, 0);
         
-        // Load Wall-E rover (rotated 90 degrees to face cube)
+        // Load Wall-E rover (rotated 90 degrees to face cube at +Z)
         const wallyResponse = await fetch('/assets/rover/wally.obj');
         const wallyObj = await wallyResponse.text();
-        viewer.load_mesh_at_rotated('rover-wally', wallyObj, 0, 0, -10, -90.0);
+        viewer.load_mesh_at_rotated('rover-wally', wallyObj, 0, 0, -10, 90.0);
         
         // Load target cube
         const cubeResponse = await fetch('/assets/rover/cube.obj');
@@ -522,16 +946,16 @@ export class RoverProject extends BaseProject {
             this.viewer.load_mesh_at('ground-plane', planeContent, 0, 0, 0);
             appLogger.debug('Ground plane loaded');
             
-            // Load Wally (rover) at z=-10, rotated 90° right to face +Z (toward cube)
-            // ROTATION: Change the 90.0 value here to adjust rover orientation
-            //   0° = facing -Z (original orientation)
-            //  90° = facing +Z (toward cube at z=10)
-            // 180° = facing +Z (away from cube)
-            // -90° = facing -Z (perpendicular)
+            // Load Wally (rover) at ORIGIN without transformation
+            // Transformation will be applied via GPU matrix in updateRoverMeshTransform()
             const wallyResponse = await fetch('/assets/rover/wally.obj');
             const wallyContent = await wallyResponse.text();
-            this.viewer.load_mesh_at_rotated('rover-wally', wallyContent, 0, 0, -10, -90.0);
-            appLogger.debug('Rover (Wally) loaded at z=-10, rotated 90° to face cube');
+            this.roverMeshContent = wallyContent; // Store for updates
+            this.viewer.load_mesh_at('rover-wally', wallyContent, 0, 0, 0);
+            appLogger.debug('Rover (Wally) loaded at origin, will be positioned via GPU matrix');
+            
+            // Apply initial transformation via GPU matrix
+            this.updateRoverMeshTransform();
             
             // Load cube at z=+10, slightly above ground (cube center at y=0.5)
             const cubeResponse = await fetch('/assets/rover/cube.obj');
@@ -596,6 +1020,73 @@ export class RoverProject extends BaseProject {
     }
 
     /**
+     * Update rover mesh visual transform based on rover logical position
+     * 
+     * Uses GPU-based transformation (updates only the model matrix uniform buffer),
+     * which is much faster than CPU-side vertex transformation.
+     */
+    private updateRoverMeshTransform(): void {
+        if (!this.viewer || !this.rover) return;
+        
+        const pos = this.rover.get_position();
+        const yaw = this.rover.get_yaw();
+        
+        // Convert yaw to degrees for mesh rotation
+        // Rover convention: yaw=0 → -Z, yaw=π/2 → -X, yaw=π → +Z, yaw=3π/2 → +X
+        // OBJ mesh default: rotation=0° → -Z (standard)
+        // Therefore: mesh_rotation = rover_yaw (no offset needed)
+        const rotationDegrees = (yaw * 180 / Math.PI + 90);
+        
+        try {
+            // Update only the model matrix (GPU uniform buffer, ~64 bytes)
+            // Much faster than set_mesh_transform() which reloads the entire mesh
+            this.viewer.update_mesh_transform_matrix(
+                'rover-wally',
+                pos[0], pos[1], pos[2],
+                rotationDegrees
+            );
+        } catch (error) {
+            appLogger.error('Failed to update rover mesh transform', error);
+        }
+    }
+    
+    /**
+     * Update camera to follow rover in 3rd person view
+     * Camera is positioned behind and above the rover, looking ahead
+     */
+    private updateCamera3rdPerson(): void {
+        if (!this.viewer || !this.rover) return;
+        
+        const pos = this.rover.get_position();
+        const yaw = this.rover.get_yaw();
+        
+        // Calculate forward and right vectors based on rover yaw
+        const forward = {
+            x: -Math.sin(yaw),
+            z: -Math.cos(yaw)
+        };
+        
+        // Camera offset from rover (behind and above)
+        const cameraDistance = 8.0; // meters behind
+        const cameraHeight = 4.0;   // meters above ground
+        
+        // Camera position = rover position - forward * distance + up * height
+        const camX = pos[0] - forward.x * cameraDistance;
+        const camY = cameraHeight;
+        const camZ = pos[2] - forward.z * cameraDistance;
+        
+        // Target point = rover position + forward offset (look ahead)
+        const lookAheadDistance = 3.0; // meters ahead of rover
+        const targetX = pos[0] + forward.x * lookAheadDistance;
+        const targetY = pos[1] + 0.5; // Look slightly above rover center
+        const targetZ = pos[2] + forward.z * lookAheadDistance;
+        
+        // Update camera position and target
+        this.viewer.camera_set_position(camX, camY, camZ);
+        this.viewer.set_camera_target(targetX, targetY, targetZ);
+    }
+
+    /**
      * Update details panel with current rover information
      */
     private updateRoverInfo(): void {
@@ -606,12 +1097,11 @@ export class RoverProject extends BaseProject {
         
         if (this.rover) {
             const pos = this.rover.get_position();
-            const orient = this.rover.get_orientation();
+            yaw = this.rover.get_yaw();
+            pitch = this.rover.get_pitch();
             posX = pos[0];
             posY = pos[1];
             posZ = pos[2];
-            yaw = orient[0];
-            pitch = orient[1];
         }
         
         // Create rover info HTML

@@ -50,6 +50,9 @@ struct MeshEntry {
     gpu_mesh: MeshGPU,
     cpu_mesh: polylab_core::Mesh,
     visible: bool,
+    transform: Mat4,                    // Model transformation matrix
+    model_buffer: wgpu::Buffer,         // GPU buffer for model matrix
+    model_bind_group: wgpu::BindGroup,  // Bind group for model uniform
 }
 
 /// High-level renderer - wraps WebGpuContext and executes render operations
@@ -61,6 +64,7 @@ pub struct Renderer {
     view_uniform_buffer: wgpu::Buffer,
     light_uniform_buffer: wgpu::Buffer,
     view_bind_group: wgpu::BindGroup,
+    model_bind_group_layout: wgpu::BindGroupLayout,  // Layout for per-mesh transforms
     meshes: HashMap<String, MeshEntry>,
     camera: Camera,
     light: DirectionalLight,
@@ -87,11 +91,14 @@ impl Renderer {
         // Create uniform buffer for light
         let light_uniform_buffer = Self::create_light_uniform_buffer(&context.device, &light);
         
-        // Create bind group layout
+        // Create bind group layout for view + light (group 0)
         let bind_group_layout = Self::create_bind_group_layout(&context.device);
         
-        // Create bind group
+        // Create bind group for view + light
         let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer, &light_uniform_buffer);
+        
+        // Create bind group layout for per-mesh model matrices (group 1)
+        let model_bind_group_layout = Self::create_model_bind_group_layout(&context.device);
         
         // Create empty mesh collection
         let meshes = HashMap::new();
@@ -101,6 +108,7 @@ impl Renderer {
             view_uniform_buffer,
             light_uniform_buffer,
             view_bind_group,
+            model_bind_group_layout,
             meshes,
             camera,
             light,
@@ -127,11 +135,14 @@ impl Renderer {
         // Create uniform buffer for light
         let light_uniform_buffer = Self::create_light_uniform_buffer(&context.device, &light);
         
-        // Create bind group layout
+        // Create bind group layout for view + light (group 0)
         let bind_group_layout = Self::create_bind_group_layout(&context.device);
         
-        // Create bind group
+        // Create bind group for view + light
         let view_bind_group = Self::create_bind_group(&context.device, &bind_group_layout, &view_uniform_buffer, &light_uniform_buffer);
+        
+        // Create bind group layout for per-mesh model matrices (group 1)
+        let model_bind_group_layout = Self::create_model_bind_group_layout(&context.device);
         
         // Create empty mesh collection
         let meshes = HashMap::new();
@@ -141,6 +152,7 @@ impl Renderer {
             view_uniform_buffer,
             light_uniform_buffer,
             view_bind_group,
+            model_bind_group_layout,
             meshes,
             camera,
             light,
@@ -174,6 +186,58 @@ impl Renderer {
                         min_binding_size: None,
                     },
                     count: None,
+                },
+            ],
+        })
+    }
+
+    /// Create bind group layout for per-mesh model matrices (group 1)
+    fn create_model_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Model Matrix Bind Group Layout"),
+            entries: &[
+                // Binding 0: Model transformation matrix (vertex shader)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        })
+    }
+
+    /// Create uniform buffer with model transformation matrix
+    fn create_model_uniform_buffer(device: &wgpu::Device, transform: &glam::Mat4) -> wgpu::Buffer {
+        use wgpu::util::DeviceExt;
+        
+        // Convert Mat4 to array of 16 f32 values
+        let matrix_data: &[f32; 16] = transform.as_ref();
+        
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Model Uniform Buffer"),
+            contents: bytemuck::cast_slice(matrix_data),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        })
+    }
+
+    /// Create bind group for a mesh's model matrix
+    fn create_model_bind_group(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        model_buffer: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Model Matrix Bind Group"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: model_buffer.as_entire_binding(),
                 },
             ],
         })
@@ -232,6 +296,11 @@ impl Renderer {
         Self::create_bind_group_layout(&self.context.device)
     }
 
+    /// Get model bind group layout (for pipeline creation)
+    pub fn model_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.model_bind_group_layout
+    }
+
     /// Get device reference (for creating pipelines, buffers, etc.)
     pub fn device(&self) -> &wgpu::Device {
         &self.context.device
@@ -249,10 +318,25 @@ impl Renderer {
     /// Call this after parsing an OBJ file to display the loaded mesh.
     pub fn add_mesh(&mut self, id: String, mesh: polylab_core::Mesh) {
         let gpu_mesh = MeshGPU::from_mesh(&self.context.device, &mesh);
+        
+        // Create identity transform for new mesh (no translation/rotation/scale)
+        let transform = Mat4::IDENTITY;
+        
+        // Create GPU buffer and bind group for model matrix
+        let model_buffer = Self::create_model_uniform_buffer(&self.context.device, &transform);
+        let model_bind_group = Self::create_model_bind_group(
+            &self.context.device,
+            &self.model_bind_group_layout,
+            &model_buffer,
+        );
+        
         self.meshes.insert(id, MeshEntry {
             gpu_mesh,
             cpu_mesh: mesh,
             visible: true,
+            transform,
+            model_buffer,
+            model_bind_group,
         });
     }
 
@@ -260,6 +344,25 @@ impl Renderer {
     pub fn set_mesh_visibility(&mut self, id: &str, visible: bool) {
         if let Some(entry) = self.meshes.get_mut(id) {
             entry.visible = visible;
+        }
+    }
+
+    /// Update mesh transformation matrix (position, rotation, scale)
+    /// 
+    /// This is much faster than reloading the mesh because it only updates
+    /// the 16 float values in the uniform buffer, not the entire mesh geometry.
+    pub fn update_mesh_transform(&mut self, id: &str, transform: Mat4) {
+        if let Some(entry) = self.meshes.get_mut(id) {
+            // Store the new transform
+            entry.transform = transform;
+            
+            // Update GPU buffer with new matrix (only 64 bytes)
+            let matrix_data: &[f32; 16] = transform.as_ref();
+            self.context.queue.write_buffer(
+                &entry.model_buffer,
+                0,
+                bytemuck::cast_slice(matrix_data),
+            );
         }
     }
 
@@ -382,6 +485,9 @@ impl Renderer {
             
             // Draw all visible meshes
             for entry in self.meshes.values().filter(|e| e.visible) {
+                // Bind per-mesh model matrix (group 1)
+                render_pass.set_bind_group(1, &entry.model_bind_group, &[]);
+                
                 render_pass.set_vertex_buffer(0, entry.gpu_mesh.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(entry.gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 render_pass.draw_indexed(0..entry.gpu_mesh.index_count, 0, 0..1);
@@ -492,6 +598,9 @@ impl Renderer {
             render_pass.set_bind_group(0, &self.view_bind_group, &[]);
             
             for entry in self.meshes.values().filter(|e| e.visible) {
+                // Bind per-mesh model matrix (group 1)
+                render_pass.set_bind_group(1, &entry.model_bind_group, &[]);
+                
                 render_pass.set_vertex_buffer(0, entry.gpu_mesh.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(entry.gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 render_pass.draw_indexed(0..entry.gpu_mesh.index_count, 0, 0..1);
@@ -529,6 +638,9 @@ impl Renderer {
             
             // Draw edges for each mesh
             for entry in self.meshes.values().filter(|e| e.visible) {
+                // Bind per-mesh model matrix (group 1)
+                render_pass.set_bind_group(1, &entry.model_bind_group, &[]);
+                
                 // Extract edges from faces - each triangle has 3 edges
                 let edges = self.extract_edges(&entry.cpu_mesh);
                 if !edges.is_empty() {
@@ -576,6 +688,9 @@ impl Renderer {
             
             // Draw vertices for each mesh
             for entry in self.meshes.values().filter(|e| e.visible) {
+                // Bind per-mesh model matrix (group 1)
+                render_pass.set_bind_group(1, &entry.model_bind_group, &[]);
+                
                 // Extract positions only
                 let positions: Vec<[f32; 3]> = entry.cpu_mesh.vertices.iter()
                     .map(|v| [v.position.x, v.position.y, v.position.z])
@@ -995,6 +1110,9 @@ impl Renderer {
             
             // Draw all visible meshes
             for entry in self.meshes.values().filter(|e| e.visible) {
+                // Bind per-mesh model matrix (group 1)
+                render_pass.set_bind_group(1, &entry.model_bind_group, &[]);
+                
                 render_pass.set_vertex_buffer(0, entry.gpu_mesh.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(entry.gpu_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 render_pass.draw_indexed(0..entry.gpu_mesh.index_count, 0, 0..1);

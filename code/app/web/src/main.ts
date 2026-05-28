@@ -22,6 +22,7 @@ import './styles/panels.css';
 import './styles/statusbar.css';
 import './styles/help.css';
 import './styles/terrain-pipeline-banner.css';
+import './styles/rover-layouts.css';
 
 /**
  * Initialize the UI components
@@ -205,6 +206,9 @@ async function main() {
         
         // Inject UI components into RoverProject
         roverProject.setUIComponents(ui.scenePanel, ui.statusBar, ui.detailsPanel);
+        
+        // Inject camera controls into RoverProject to allow disabling them
+        roverProject.setCameraControls(cameraControls);
         
         // Register RoverProject (will be initialized when activated)
         projectManager.registerProject(roverProject);

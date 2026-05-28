@@ -89,22 +89,26 @@ impl ViewerHandle {
 
         log::debug!("Renderer created, building render pipelines...");
         
-        // Create render pipelines with bind group layout
+        // Create render pipelines with bind group layouts
         let bind_group_layout = renderer.bind_group_layout();
+        let model_bind_group_layout = renderer.model_bind_group_layout();
         let solid_pipeline = create_render_pipeline(
             renderer.device(),
             renderer.surface_format(),
             &bind_group_layout,
+            model_bind_group_layout,
         );
         let wireframe_pipeline = create_wireframe_pipeline(
             renderer.device(),
             renderer.surface_format(),
             &bind_group_layout,
+            model_bind_group_layout,
         );
         let vertices_pipeline = create_vertices_pipeline(
             renderer.device(),
             renderer.surface_format(),
             &bind_group_layout,
+            model_bind_group_layout,
         );
 
         log::info!("Viewer created successfully");
@@ -318,8 +322,48 @@ impl ViewerHandle {
         // Add mesh to scene
         self.renderer.add_mesh(mesh_id.to_string(), mesh);
 
-        log::info!("Mesh '{}' loaded, rotated, and positioned successfully", mesh_id);
+        log::info!("Mesh '{}' loaded and positioned successfully", mesh_id);
         Ok(mesh_id.to_string())
+    }
+    
+    /// Update the transform (position and rotation) of an existing mesh
+    ///
+    /// This method reloads the mesh from the stored OBJ content with new transformations.
+    /// The mesh must have been loaded previously with load_mesh_at or load_mesh_at_rotated.
+    ///
+    /// # Arguments
+    /// * `mesh_id` - ID of the mesh to transform
+    /// * `obj_content` - Original OBJ file content
+    /// * `x`, `y`, `z` - New position coordinates
+    /// * `rotation_y_degrees` - New rotation angle around Y axis
+    ///
+    /// # Returns
+    /// Ok(()) on success, Err if mesh doesn't exist or parsing fails
+    #[wasm_bindgen]
+    pub fn set_mesh_transform(&mut self, mesh_id: &str, obj_content: &str, x: f32, y: f32, z: f32, rotation_y_degrees: f32) -> Result<(), JsValue> {
+        // Simply reload the mesh with new transform
+        self.load_mesh_at_rotated(mesh_id, obj_content, x, y, z, rotation_y_degrees)?;
+        Ok(())
+    }
+
+    /// Update mesh transformation matrix (GPU-based, very fast)
+    ///
+    /// Updates only the 16-float model matrix uniform buffer, not the mesh geometry.
+    /// Much faster than set_mesh_transform() which reloads the entire mesh.
+    /// Use this for smooth 60 FPS movement of existing meshes.
+    #[wasm_bindgen]
+    pub fn update_mesh_transform_matrix(&mut self, mesh_id: &str, x: f32, y: f32, z: f32, rotation_y_degrees: f32) {
+        use glam::{Mat4, Vec3, Quat};
+        
+        // Build transformation matrix: Translation * Rotation * Scale
+        let translation = Mat4::from_translation(Vec3::new(x, y, z));
+        let rotation = Mat4::from_rotation_y(rotation_y_degrees.to_radians());
+        let scale = Mat4::from_scale(Vec3::ONE); // No scaling
+        
+        let transform = translation * rotation * scale;
+        
+        // Update GPU buffer (only 64 bytes)
+        self.renderer.update_mesh_transform(mesh_id, transform);
     }
 
     /// Set the visibility of a mesh

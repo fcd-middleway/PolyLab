@@ -235,6 +235,45 @@ export class ScenePanel implements UIComponent {
     }
 
     /**
+     * Add a camera to the scene
+     */
+    addCamera(id: string, name: string, position: [number, number, number], target: [number, number, number], fov: number = 60): void {
+        const cameraNode: SceneNode = {
+            id,
+            type: 'camera',
+            name,
+            icon: '📹',
+            visible: true,
+            metadata: {
+                position,
+                target,
+                fov
+            }
+        };
+
+        this.treeView.addNode('cameras-folder', cameraNode);
+    }
+
+    /**
+     * Update camera position and target
+     */
+    updateCameraPosition(id: string, position: [number, number, number], target: [number, number, number]): void {
+        this.treeView.updateNode(id, { 
+            metadata: { 
+                position, 
+                target 
+            } 
+        });
+    }
+
+    /**
+     * Remove a camera from the scene
+     */
+    removeCamera(id: string): void {
+        this.treeView.removeNode(id);
+    }
+
+    /**
      * Update mesh visibility
      */
     setMeshVisibility(id: string, visible: boolean): void {

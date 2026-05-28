@@ -3,12 +3,13 @@ import type { ToolbarAction } from '../core/types';
 import { FileToolbar } from './FileToolbar';
 import { ViewToolbar } from './ViewToolbar';
 import { ModeToolbar } from './ModeToolbar';
+import { LayoutToolbar } from './LayoutToolbar';
 
 /**
- * Toolbar component - Composed of 3 sections
+ * Toolbar component - Composed of 4 sections
  * 
  * Structure:
- * [FILE Section (FileToolbar)] | [VIEW Section (ViewToolbar)] | [MODE Section (ModeToolbar)]
+ * [FILE Section (FileToolbar)] | [VIEW Section (ViewToolbar)] | [MODE Section (ModeToolbar)] | [LAYOUT Section (LayoutToolbar)]
  */
 export class Toolbar implements UIComponent {
     element: HTMLElement;
@@ -17,6 +18,7 @@ export class Toolbar implements UIComponent {
     private fileToolbar: FileToolbar;
     private viewToolbar: ViewToolbar;
     private modeToolbar: ModeToolbar;
+    private layoutToolbar: LayoutToolbar;
 
     constructor() {
         this.element = this.createElement();
@@ -25,6 +27,7 @@ export class Toolbar implements UIComponent {
         this.fileToolbar = new FileToolbar();
         this.viewToolbar = new ViewToolbar();
         this.modeToolbar = new ModeToolbar();
+        this.layoutToolbar = new LayoutToolbar();
         
         // Add sections to toolbar
         this.element.appendChild(this.fileToolbar.element);
@@ -32,6 +35,8 @@ export class Toolbar implements UIComponent {
         this.element.appendChild(this.viewToolbar.element);
         this.element.appendChild(this.createDivider());
         this.element.appendChild(this.modeToolbar.element);
+        this.element.appendChild(this.createDivider());
+        this.element.appendChild(this.layoutToolbar.element);
     }
 
     /**
@@ -57,6 +62,20 @@ export class Toolbar implements UIComponent {
      */
     public setModeActions(actions: ToolbarAction[]): void {
         this.modeToolbar.setActions(actions);
+    }
+
+    /**
+     * Set LAYOUT-specific actions (called when project changes)
+     */
+    public setLayoutActions(actions: ToolbarAction[]): void {
+        this.layoutToolbar.setActions(actions);
+    }
+
+    /**
+     * Set active layout button programmatically
+     */
+    public setActiveLayoutButton(actionId: string): void {
+        this.layoutToolbar.setActiveButton(actionId);
     }
 
     /**
@@ -97,6 +116,7 @@ export class Toolbar implements UIComponent {
         this.fileToolbar.destroy();
         this.viewToolbar.destroy();
         this.modeToolbar.destroy();
+        this.layoutToolbar.destroy();
         this.element.remove();
     }
 }

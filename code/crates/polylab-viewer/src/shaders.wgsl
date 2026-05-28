@@ -27,6 +27,14 @@ struct DirectionalLight {
 @group(0) @binding(1)
 var<uniform> light: DirectionalLight;
 
+// Model matrix - per-mesh transformation (position, rotation, scale)
+struct ModelUniforms {
+    transform: mat4x4<f32>,  // Model transformation matrix
+}
+
+@group(1) @binding(0)
+var<uniform> model: ModelUniforms;
+
 // Vertex shader output / Fragment shader input
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,  // Clip-space position
@@ -35,7 +43,7 @@ struct VertexOutput {
     @location(2) world_pos: vec3<f32>,       // World position for lighting
 }
 
-// Vertex shader - transforms vertices through view-projection
+// Vertex shader - transforms vertices through model, view, and projection matrices
 @vertex
 fn vs_main(
     @location(0) position: vec3<f32>,  // Position from vertex buffer
@@ -45,15 +53,20 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
     
-    // Transform position through view-projection matrix
-    out.position = view.view_proj * vec4<f32>(position, 1.0);
+    // Transform position: Model → View → Projection
+    let world_pos = model.transform * vec4<f32>(position, 1.0);
+    out.position = view.view_proj * world_pos;
     
-    // Store world position for future effects
-    out.world_pos = position;
+    // Store world position for lighting
+    out.world_pos = world_pos.xyz;
     
-    // Pass through vertex color and normal (interpolated by GPU across triangles)
+    // Transform normal by model matrix (assuming uniform scaling)
+    // For non-uniform scaling, should use transpose(inverse(model)) but we skip for performance
+    let world_normal = (model.transform * vec4<f32>(normal, 0.0)).xyz;
+    out.normal = normalize(world_normal);
+    
+    // Pass through vertex color (interpolated by GPU across triangles)
     out.color = color;
-    out.normal = normalize(normal);
     
     return out;
 }

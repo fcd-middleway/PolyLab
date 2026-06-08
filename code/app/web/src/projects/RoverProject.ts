@@ -288,11 +288,11 @@ export class RoverProject extends BaseProject {
             
             // Rotation
             if (this.keysPressed.has('ArrowLeft')) {
-                this.rover.rotate(this.rotateSpeed * deltaTime);
+                this.rover.rotate(-this.rotateSpeed * deltaTime);
                 moved = true;
             }
             if (this.keysPressed.has('ArrowRight')) {
-                this.rover.rotate(-this.rotateSpeed * deltaTime);
+                this.rover.rotate(this.rotateSpeed * deltaTime);
                 moved = true;
             }
             
@@ -1064,14 +1064,8 @@ export class RoverProject extends BaseProject {
         
         // Convert yaw to degrees for mesh rotation
         // Unified convention: yaw=0 → -Z, yaw increases → rotates left (+X direction)
-        // OBJ mesh coordinate system needs rotation adjustment
-        const rotationDegrees = -(yaw * 180 / Math.PI);
-        
-        console.log('[Mesh Transform]', {
-            yaw: yaw,
-            yawDegrees: (yaw * 180 / Math.PI).toFixed(1),
-            rotationDegrees: rotationDegrees.toFixed(1)
-        });
+        // Wall-E OBJ mesh is rotated 90° right by default, so we add -90° offset
+        const rotationDegrees = -(yaw * 180 / Math.PI - 90);
         
         try {
             // Update main viewer

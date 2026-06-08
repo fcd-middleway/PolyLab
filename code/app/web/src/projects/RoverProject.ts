@@ -31,6 +31,8 @@ export class RoverProject extends BaseProject {
     private rightViewer: any | null = null;
     private stereoCanvasLeft: HTMLCanvasElement | null = null;
     private stereoCanvasRight: HTMLCanvasElement | null = null;
+    private stereoAnimationId: number | null = null;
+    private fullGridAnimationId: number | null = null;
     
     // Rover handle (WASM)
     private rover: any | null = null; // RoverHandle from polylab-rover
@@ -230,7 +232,10 @@ export class RoverProject extends BaseProject {
             },
             cleanup: async () => {
                 appLogger.debug('[RoverProject] Cleaning up Stereo layout');
-                await this.cleanupStereoViewers();
+                this.stopStereoRenderLoop();
+                // Release viewers
+                this.leftViewer = null;
+                this.rightViewer = null;
             }
         });
 
@@ -249,10 +254,16 @@ export class RoverProject extends BaseProject {
         this.layoutManager.registerLayout({
             id: 'full-grid',
             title: 'Full Analysis',
-            setup: (container) => {
+            setup: async (container) => {
                 appLogger.debug('[RoverProject] Setting up Full Grid layout');
-                container.innerHTML = RoverUITemplates.generateFullGridHTML();
-                // TODO: Initialize all 4 views
+                await this.setupFullGridLayout(container);
+            },
+            cleanup: async () => {
+                appLogger.debug('[RoverProject] Cleaning up Full Grid layout');
+                this.stopFullGridRenderLoop();
+                // Release stereo viewers
+                this.leftViewer = null;
+                this.rightViewer = null;
             }
         });
 
@@ -315,16 +326,15 @@ export class RoverProject extends BaseProject {
     cleanup(): void {
         appLogger.info('Cleaning up Rover project...');
         
+        // Stop all render loops
+        this.stopStereoRenderLoop();
+        this.stopFullGridRenderLoop();
+        
         // Cleanup layout manager
         if (this.layoutManager) {
             this.layoutManager.destroy();
             this.layoutManager = null;
         }
-        
-        // Cleanup stereo viewers (if not already cleaned by layout manager)
-        this.cleanupStereoViewers();
-        
-        // TODO: Remove rover meshes, camera visualizations, etc.
     }
 
     onActivate(): void {
@@ -539,6 +549,20 @@ export class RoverProject extends BaseProject {
         // Special case: 'scene' mode restores the original canvas
         if (mode === 'scene') {
             await this.layoutManager.restoreOriginal();
+            
+            // Ensure canvas has correct resolution for container
+            const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
+            const container = canvas?.parentElement;
+            if (canvas && container) {
+                const rect = container.getBoundingClientRect();
+                canvas.width = rect.width * window.devicePixelRatio;
+                canvas.height = rect.height * window.devicePixelRatio;
+                appLogger.debug('[RoverProject] Scene canvas resized', {
+                    width: canvas.width,
+                    height: canvas.height,
+                    devicePixelRatio: window.devicePixelRatio
+                });
+            }
         } else {
             // Switch to specialized layout
             await this.layoutManager.switchLayout(mode);
@@ -831,28 +855,23 @@ export class RoverProject extends BaseProject {
     }
 
     /**
-     * Initialize left and right viewers for stereo mode
+     * Create stereo viewers (shared logic for stereo and full-grid modes)
+     * This ensures IDENTICAL configuration in both modes
      */
-    private async initStereoViewers(): Promise<void> {
-        // Import WASM modules from crates pkg (same pattern as main viewer)
-        // @ts-ignore - WASM module from relative path
+    private async createStereoViewers(): Promise<void> {
+        appLogger.debug('[RoverProject] Creating stereo viewers...');
+        
+        // Import WASM modules
+        // @ts-ignore
         const viewerModule = await import('../../../../crates/polylab-viewer/pkg/polylab_viewer.js');
         await viewerModule.default();
         
-        // NOTE: Rover is already created in initRover(), don't recreate it here
-        // This preserves any parameter changes made by the user
         if (!this.rover) {
-            appLogger.error('[RoverProject] Rover not initialized before stereo viewers');
+            appLogger.error('[RoverProject] Rover not initialized');
             return;
         }
         
-        appLogger.debug('[RoverProject] Using existing rover for stereo views', {
-            position: this.rover.get_position(),
-            baseline: this.rover.get_stereo_baseline(),
-            eyeHeight: this.rover.get_eye_height()
-        });
-        
-        // Get canvas references FIRST
+        // Get canvas references
         this.stereoCanvasLeft = document.getElementById('stereo-canvas-left') as HTMLCanvasElement;
         this.stereoCanvasRight = document.getElementById('stereo-canvas-right') as HTMLCanvasElement;
         
@@ -862,7 +881,6 @@ export class RoverProject extends BaseProject {
         }
         
         // Set canvas resolution to match container size (fixes pixelation)
-        // MUST be done BEFORE creating viewers
         const leftContainer = this.stereoCanvasLeft.parentElement;
         const rightContainer = this.stereoCanvasRight.parentElement;
         
@@ -870,48 +888,66 @@ export class RoverProject extends BaseProject {
             const leftRect = leftContainer.getBoundingClientRect();
             const rightRect = rightContainer.getBoundingClientRect();
             
-            // Set canvas internal resolution (pixel buffer size)
-            // Multiply by devicePixelRatio for sharp rendering on retina displays
             this.stereoCanvasLeft.width = leftRect.width * window.devicePixelRatio;
             this.stereoCanvasLeft.height = leftRect.height * window.devicePixelRatio;
             
             this.stereoCanvasRight.width = rightRect.width * window.devicePixelRatio;
             this.stereoCanvasRight.height = rightRect.height * window.devicePixelRatio;
             
-            appLogger.debug('[RoverProject] Stereo canvas resolution set', {
-                leftCanvas: { 
-                    width: this.stereoCanvasLeft.width, 
-                    height: this.stereoCanvasLeft.height,
-                    containerSize: { width: leftRect.width, height: leftRect.height },
-                    devicePixelRatio: window.devicePixelRatio
-                },
-                rightCanvas: { 
-                    width: this.stereoCanvasRight.width, 
-                    height: this.stereoCanvasRight.height 
-                }
+            appLogger.debug('[RoverProject] Stereo canvas sizes set', {
+                left: { width: this.stereoCanvasLeft.width, height: this.stereoCanvasLeft.height },
+                right: { width: this.stereoCanvasRight.width, height: this.stereoCanvasRight.height },
+                devicePixelRatio: window.devicePixelRatio
             });
-        } else {
-            appLogger.warn('[RoverProject] Could not get stereo canvas containers for sizing');
         }
         
-        // Create left viewer
-        appLogger.debug('Creating left viewer...');
+        // Create viewers
+        appLogger.debug('[RoverProject] Creating stereo viewers from canvas elements...');
         this.leftViewer = await viewerModule.ViewerHandle.create('stereo-canvas-left');
-        
-        // Create right viewer
-        appLogger.debug('Creating right viewer...');
         this.rightViewer = await viewerModule.ViewerHandle.create('stereo-canvas-right');
         
-        // Load scene meshes into both viewers
+        // Load scene meshes
         await this.loadSceneIntoViewer(this.leftViewer);
         await this.loadSceneIntoViewer(this.rightViewer);
         
-        // Apply initial rover transformation to stereo viewers
+        // Apply rover transformation
         this.updateRoverMeshTransform();
-        appLogger.debug('[RoverProject] Initial rover transformation applied to stereo viewers');
         
-        // Start render loop for stereo viewers
+        appLogger.debug('[RoverProject] Stereo viewers created successfully');
+    }
+    
+    /**
+     * Initialize stereo viewers (always creates fresh viewers with current rover parameters)
+     */
+    private async initStereoViewers(): Promise<void> {
+        appLogger.debug('[RoverProject] Initializing stereo viewers...');
+        
+        // Use shared creation logic
+        await this.createStereoViewers();
+        
+        // Start render loop
+        this.startStereoRenderLoop();
+        
+        appLogger.debug('[RoverProject] Stereo viewers initialized successfully');
+    }
+    
+    /**
+     * Start stereo render loop
+     */
+    private startStereoRenderLoop(): void {
+        appLogger.debug('[RoverProject] Starting stereo render loop');
+        this.stopStereoRenderLoop();
         this.renderStereoFrame();
+    }
+    
+    /**
+     * Stop stereo render loop
+     */
+    private stopStereoRenderLoop(): void {
+        if (this.stereoAnimationId !== null) {
+            cancelAnimationFrame(this.stereoAnimationId);
+            this.stereoAnimationId = null;
+        }
     }
     
     /**
@@ -939,11 +975,16 @@ export class RoverProject extends BaseProject {
      * Render frame for stereo viewers
      */
     private renderStereoFrame = (): void => {
+        // Only render if still in stereo mode
+        if (this.currentViewMode !== 'stereo') {
+            this.stereoAnimationId = null;
+            return;
+        }
+        
         if (!this.leftViewer || !this.rightViewer || !this.rover) return;
         
         try {
             // Sync rover mesh position in stereo viewers before rendering
-            // This ensures the mesh follows the rover's logical position in real-time
             this.updateRoverMeshTransform();
             
             // Calculate aspect ratio from canvas dimensions
@@ -961,30 +1002,118 @@ export class RoverProject extends BaseProject {
             // Render right eye
             this.rightViewer.render_with_matrix(rightMatrix);
             
-            // Continue rendering if still in stereo mode
-            if (this.currentViewMode === 'stereo') {
-                requestAnimationFrame(this.renderStereoFrame);
-            }
         } catch (error) {
             appLogger.error('Stereo render error:', error);
+        }
+        
+        // Continue rendering
+        this.stereoAnimationId = requestAnimationFrame(this.renderStereoFrame);
+    };
+
+    // ========================
+    // Full Grid Layout (Scene + Stereo)
+    // ========================
+
+    /**
+     * Setup full grid layout (preserves original canvas, creates fresh stereo viewers)
+     */
+    private async setupFullGridLayout(container: HTMLElement): Promise<void> {
+        appLogger.debug('[RoverProject] Setting up full grid layout...');
+        
+        if (!this.rover) {
+            appLogger.error('[RoverProject] Rover not initialized');
+            return;
+        }
+        
+        // CRITICAL: Get the original webgpu-canvas BEFORE modifying HTML
+        const webgpuCanvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
+        if (!webgpuCanvas) {
+            appLogger.error('[RoverProject] webgpu-canvas not found');
+            return;
+        }
+        
+        // Remove canvas temporarily to preserve it
+        webgpuCanvas.remove();
+        
+        // Build full grid HTML (does NOT include webgpu-canvas)
+        container.innerHTML = RoverUITemplates.generateFullGridHTML();
+        
+        // Insert the ORIGINAL webgpu-canvas into the scene container
+        const sceneContainer = container.querySelector('.grid-main-scene');
+        if (sceneContainer) {
+            sceneContainer.appendChild(webgpuCanvas);
+        }
+        
+        // Do NOT resize the main canvas - keep it as is to preserve the viewer
+        // The CSS will handle the display size
+        
+        // Create stereo viewers using EXACT same logic as stereo mode
+        await this.createStereoViewers();
+        
+        // Start render loop
+        this.startFullGridRenderLoop();
+        
+        appLogger.debug('[RoverProject] Full grid layout setup complete');
+    }
+    /**
+     * Start full grid render loop
+     */
+    private startFullGridRenderLoop(): void {
+        appLogger.debug('[RoverProject] Starting full grid render loop');
+        this.stopFullGridRenderLoop();
+        this.renderFullGridFrame();
+    }
+    
+    /**
+     * Stop full grid render loop
+     */
+    private stopFullGridRenderLoop(): void {
+        if (this.fullGridAnimationId !== null) {
+            cancelAnimationFrame(this.fullGridAnimationId);
+            this.fullGridAnimationId = null;
         }
     }
     
     /**
-     * Cleanup stereo viewers
+     * Render frame for full grid mode
      */
-    private async cleanupStereoViewers(): Promise<void> {
-        if (this.leftViewer || this.rightViewer) {
-            appLogger.debug('Cleaning up stereo viewers');
-            
-            // Note: WASM ViewerHandle doesn't have explicit cleanup method
-            // Resources will be released when objects are garbage collected
-            this.leftViewer = null;
-            this.rightViewer = null;
-            this.stereoCanvasLeft = null;
-            this.stereoCanvasRight = null;
+    private renderFullGridFrame = (): void => {
+        if (this.currentViewMode !== 'full-grid') {
+            this.fullGridAnimationId = null;
+            return;
         }
-    }
+        
+        if (!this.rover || !this.viewer || !this.leftViewer || !this.rightViewer) {
+            return;
+        }
+        
+        try {
+            // Update rover mesh in all viewers
+            this.updateRoverMeshTransform();
+            
+            // Render main scene
+            const webgpuCanvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
+            if (webgpuCanvas) {
+                const sceneAspect = webgpuCanvas.width / webgpuCanvas.height;
+                this.viewer.render(sceneAspect);
+            }
+            
+            // Render stereo views
+            if (this.stereoCanvasLeft && this.stereoCanvasRight) {
+                const stereoAspect = this.stereoCanvasLeft.width / this.stereoCanvasLeft.height;
+                
+                const leftMatrix = this.rover.get_left_view_projection_matrix(stereoAspect);
+                const rightMatrix = this.rover.get_right_view_projection_matrix(stereoAspect);
+                
+                this.leftViewer.render_with_matrix(leftMatrix);
+                this.rightViewer.render_with_matrix(rightMatrix);
+            }
+        } catch (error) {
+            appLogger.error('[RoverProject] Error in full grid render:', error);
+        }
+        
+        this.fullGridAnimationId = requestAnimationFrame(this.renderFullGridFrame);
+    };
 
     // ========================
     // Scene Loading
@@ -1106,6 +1235,7 @@ export class RoverProject extends BaseProject {
             }
             
             // Update stereo viewers (if active)
+            // These are reused in both stereo and full-grid modes
             if (this.leftViewer) {
                 this.leftViewer.update_mesh_transform_matrix(
                     'rover-wally',

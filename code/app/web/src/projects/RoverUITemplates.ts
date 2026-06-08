@@ -116,26 +116,27 @@ export class RoverUITemplates {
     }
 
     /**
-     * Generate full grid view layout HTML  
+     * Generate full grid view layout HTML
+     * Layout: stereo cameras strip at top (20%), main scene below (80%)
+     * NOTE: Does NOT include webgpu-canvas - it must be preserved and reinserted
      */
     static generateFullGridHTML(): string {
         return `
             <div class="grid-container">
-                <div class="grid-view">
+                <!-- Stereo cameras strip (top 20%) -->
+                <div class="grid-stereo-strip">
+                    <div class="grid-stereo-view">
+                        <h3>📷 Left Camera</h3>
+                        <canvas id="stereo-canvas-left"></canvas>
+                    </div>
+                    <div class="grid-stereo-view">
+                        <h3>📷 Right Camera</h3>
+                        <canvas id="stereo-canvas-right"></canvas>
+                    </div>
+                </div>
+                <!-- Main scene (bottom 80%) - canvas will be inserted here -->
+                <div class="grid-main-scene">
                     <h3>🎬 Scene</h3>
-                    <canvas id="grid-canvas-scene"></canvas>
-                </div>
-                <div class="grid-view">
-                    <h3>📷 Left</h3>
-                    <canvas id="grid-canvas-left"></canvas>
-                </div>
-                <div class="grid-view">
-                    <h3>📷 Right</h3>
-                    <canvas id="grid-canvas-right"></canvas>
-                </div>
-                <div class="grid-view">
-                    <h3>🔬 Depth</h3>
-                    <canvas id="grid-canvas-depth"></canvas>
                 </div>
             </div>
         `;

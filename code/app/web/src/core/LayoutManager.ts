@@ -62,8 +62,23 @@ export class LayoutManager {
             }
         }
 
-        // Clear container
+        // CRITICAL: Preserve the original canvas before clearing container
+        // This allows layouts to reuse it instead of creating a new one
+        if (!this.originalCanvas) {
+            this.originalCanvas = this.container.querySelector('canvas');
+            appLogger.debug('[LayoutManager] Preserved original canvas', { 
+                canvasId: this.originalCanvas?.id 
+            });
+        }
+
+        // Clear container (but canvas is already saved in this.originalCanvas)
         this.container.innerHTML = '';
+        
+        // Temporarily inject the original canvas back into container
+        // so setup() can find it with getElementById() if needed
+        if (this.originalCanvas) {
+            this.container.appendChild(this.originalCanvas);
+        }
 
         // Setup new layout
         appLogger.debug(`[LayoutManager] Setting up layout: ${layoutId}`);

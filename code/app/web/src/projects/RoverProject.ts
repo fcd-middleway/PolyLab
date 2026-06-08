@@ -852,15 +852,7 @@ export class RoverProject extends BaseProject {
             eyeHeight: this.rover.get_eye_height()
         });
         
-        // Create left viewer
-        appLogger.debug('Creating left viewer...');
-        this.leftViewer = await viewerModule.ViewerHandle.create('stereo-canvas-left');
-        
-        // Create right viewer
-        appLogger.debug('Creating right viewer...');
-        this.rightViewer = await viewerModule.ViewerHandle.create('stereo-canvas-right');
-        
-        // Get canvas references for aspect ratio calculation
+        // Get canvas references FIRST
         this.stereoCanvasLeft = document.getElementById('stereo-canvas-left') as HTMLCanvasElement;
         this.stereoCanvasRight = document.getElementById('stereo-canvas-right') as HTMLCanvasElement;
         
@@ -869,10 +861,46 @@ export class RoverProject extends BaseProject {
             return;
         }
         
-        appLogger.debug('[RoverProject] Stereo canvas references acquired', {
-            leftCanvas: { width: this.stereoCanvasLeft.width, height: this.stereoCanvasLeft.height },
-            rightCanvas: { width: this.stereoCanvasRight.width, height: this.stereoCanvasRight.height }
-        });
+        // Set canvas resolution to match container size (fixes pixelation)
+        // MUST be done BEFORE creating viewers
+        const leftContainer = this.stereoCanvasLeft.parentElement;
+        const rightContainer = this.stereoCanvasRight.parentElement;
+        
+        if (leftContainer && rightContainer) {
+            const leftRect = leftContainer.getBoundingClientRect();
+            const rightRect = rightContainer.getBoundingClientRect();
+            
+            // Set canvas internal resolution (pixel buffer size)
+            // Multiply by devicePixelRatio for sharp rendering on retina displays
+            this.stereoCanvasLeft.width = leftRect.width * window.devicePixelRatio;
+            this.stereoCanvasLeft.height = leftRect.height * window.devicePixelRatio;
+            
+            this.stereoCanvasRight.width = rightRect.width * window.devicePixelRatio;
+            this.stereoCanvasRight.height = rightRect.height * window.devicePixelRatio;
+            
+            appLogger.debug('[RoverProject] Stereo canvas resolution set', {
+                leftCanvas: { 
+                    width: this.stereoCanvasLeft.width, 
+                    height: this.stereoCanvasLeft.height,
+                    containerSize: { width: leftRect.width, height: leftRect.height },
+                    devicePixelRatio: window.devicePixelRatio
+                },
+                rightCanvas: { 
+                    width: this.stereoCanvasRight.width, 
+                    height: this.stereoCanvasRight.height 
+                }
+            });
+        } else {
+            appLogger.warn('[RoverProject] Could not get stereo canvas containers for sizing');
+        }
+        
+        // Create left viewer
+        appLogger.debug('Creating left viewer...');
+        this.leftViewer = await viewerModule.ViewerHandle.create('stereo-canvas-left');
+        
+        // Create right viewer
+        appLogger.debug('Creating right viewer...');
+        this.rightViewer = await viewerModule.ViewerHandle.create('stereo-canvas-right');
         
         // Load scene meshes into both viewers
         await this.loadSceneIntoViewer(this.leftViewer);

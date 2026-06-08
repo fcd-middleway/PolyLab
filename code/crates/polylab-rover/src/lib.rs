@@ -25,6 +25,8 @@ pub struct Rover {
     pub eye_height: f32,
     /// Distance between left and right stereo cameras (meters)
     pub stereo_baseline: f32,
+    /// Forward offset of stereo cameras from rover center (meters)
+    pub forward_offset: f32,
 }
 
 impl Rover {
@@ -36,6 +38,7 @@ impl Rover {
             pitch: 0.0,
             eye_height: 0.8, // 80cm for Wall-E's eyes
             stereo_baseline: 0.3, // 30cm between cameras
+            forward_offset: 0.25, // 25cm forward to clear Wall-E's arms
         }
     }
     
@@ -47,6 +50,7 @@ impl Rover {
             pitch: 0.0,
             eye_height: 0.8,
             stereo_baseline: 0.3,
+            forward_offset: 0.25,
         }
     }
     
@@ -108,15 +112,21 @@ impl Rover {
     
     /// Get position of left stereo camera
     pub fn get_left_camera_position(&self) -> Vec3 {
+        let forward = Vec3::new(self.yaw.sin(), 0.0, -self.yaw.cos());
         let right = Vec3::new(self.yaw.cos(), 0.0, self.yaw.sin());
-        let eye_pos = self.position + Vec3::new(0.0, self.eye_height, 0.0);
+        let eye_pos = self.position 
+            + Vec3::new(0.0, self.eye_height, 0.0)  // vertical offset
+            + forward * self.forward_offset;         // forward offset
         eye_pos - right * (self.stereo_baseline / 2.0)
     }
     
     /// Get position of right stereo camera
     pub fn get_right_camera_position(&self) -> Vec3 {
+        let forward = Vec3::new(self.yaw.sin(), 0.0, -self.yaw.cos());
         let right = Vec3::new(self.yaw.cos(), 0.0, self.yaw.sin());
-        let eye_pos = self.position + Vec3::new(0.0, self.eye_height, 0.0);
+        let eye_pos = self.position 
+            + Vec3::new(0.0, self.eye_height, 0.0)  // vertical offset
+            + forward * self.forward_offset;         // forward offset
         eye_pos + right * (self.stereo_baseline / 2.0)
     }
     
@@ -244,6 +254,18 @@ impl RoverHandle {
     #[wasm_bindgen]
     pub fn get_eye_height(&self) -> f32 {
         self.rover.eye_height
+    }
+    
+    /// Set camera forward offset from rover center (meters)
+    #[wasm_bindgen]
+    pub fn set_forward_offset(&mut self, offset: f32) {
+        self.rover.forward_offset = offset;
+    }
+    
+    /// Get camera forward offset (meters)
+    #[wasm_bindgen]
+    pub fn get_forward_offset(&self) -> f32 {
+        self.rover.forward_offset
     }
     
     /// Get left stereo camera position as [x, y, z]

@@ -16,7 +16,8 @@ use wasm_bindgen::prelude::*;
 pub struct Rover {
     /// Position in world space (meters)
     pub position: Vec3,
-    /// Yaw rotation (Y-axis, radians). 0 = facing -Z
+    /// Yaw rotation (Y-axis, radians). 0 = facing -Z, π/2 = facing +X
+    /// Uses same convention as Camera: rotation positive = counterclockwise (left turn)
     pub yaw: f32,
     /// Pitch rotation (X-axis, radians). Positive = looking up
     pub pitch: f32,
@@ -62,9 +63,10 @@ impl Rover {
     
     /// Move rover forward by a distance
     /// Forward is determined by the yaw rotation
+    /// Convention: yaw=0 → -Z, yaw increases → turns left (+X direction)
     pub fn move_forward(&mut self, distance: f32) {
         let forward = Vec3::new(
-            -self.yaw.sin(),
+            self.yaw.sin(),
             0.0,
             -self.yaw.cos(),
         );
@@ -72,11 +74,12 @@ impl Rover {
     }
     
     /// Move rover sideways (strafe)
+    /// Right is perpendicular to forward
     pub fn move_right(&mut self, distance: f32) {
         let right = Vec3::new(
             self.yaw.cos(),
             0.0,
-            -self.yaw.sin(),
+            self.yaw.sin(),
         );
         self.position += right * distance;
     }
@@ -105,14 +108,14 @@ impl Rover {
     
     /// Get position of left stereo camera
     pub fn get_left_camera_position(&self) -> Vec3 {
-        let right = Vec3::new(self.yaw.cos(), 0.0, -self.yaw.sin());
+        let right = Vec3::new(self.yaw.cos(), 0.0, self.yaw.sin());
         let eye_pos = self.position + Vec3::new(0.0, self.eye_height, 0.0);
         eye_pos - right * (self.stereo_baseline / 2.0)
     }
     
     /// Get position of right stereo camera
     pub fn get_right_camera_position(&self) -> Vec3 {
-        let right = Vec3::new(self.yaw.cos(), 0.0, -self.yaw.sin());
+        let right = Vec3::new(self.yaw.cos(), 0.0, self.yaw.sin());
         let eye_pos = self.position + Vec3::new(0.0, self.eye_height, 0.0);
         eye_pos + right * (self.stereo_baseline / 2.0)
     }

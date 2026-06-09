@@ -8,12 +8,17 @@ export class ViewerCanvas implements UIComponent {
     private canvas: HTMLCanvasElement;
     private bannerContainer: HTMLElement;
     private canvasWrapper: HTMLElement;
+    private resizeObserver: ResizeObserver | null = null;
+    private viewer: any = null; // Reference to WASM viewer for resize notifications
 
     constructor() {
         this.element = this.createElement();
         this.canvas = this.element.querySelector('canvas')!;
         this.bannerContainer = this.element.querySelector('.viewer-banner-container')!;
         this.canvasWrapper = this.element.querySelector('.viewer-canvas-wrapper')!;
+        
+        // Set up resize observer for automatic canvas resizing
+        this.setupResizeObserver();
     }
 
     private createElement(): HTMLElement {
@@ -29,6 +34,36 @@ export class ViewerCanvas implements UIComponent {
         `;
 
         return container;
+    }
+
+    /**
+     * Set viewer reference for resize notifications
+     */
+    setViewer(viewer: any): void {
+        this.viewer = viewer;
+    }
+
+    /**
+     * Set up ResizeObserver to automatically resize canvas when wrapper changes
+     */
+    private setupResizeObserver(): void {
+        this.resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.target === this.canvasWrapper) {
+                    // Get the actual rendered size
+                    const rect = this.canvasWrapper.getBoundingClientRect();
+                    const width = Math.floor(rect.width);
+                    const height = Math.floor(rect.height);
+                    
+                    if (width > 0 && height > 0) {
+                        this.resize(width, height);
+                    }
+                }
+            }
+        });
+        
+        // Observe the canvas wrapper
+        this.resizeObserver.observe(this.canvasWrapper);
     }
 
     /**
@@ -59,8 +94,19 @@ export class ViewerCanvas implements UIComponent {
      * Resize canvas to fit container
      */
     resize(width: number, height: number): void {
+        // Update canvas dimensions
         this.canvas.width = width;
         this.canvas.height = height;
+        
+        // Notify WASM viewer about resize (if available)
+        if (this.viewer && typeof this.viewer.resize === 'function') {
+            try {
+                this.viewer.resize(width, height);
+            } catch (error) {
+                console.warn('[ViewerCanvas] Failed to notify viewer of resize:', error);
+            }
+        }
+        
         console.log(`[ViewerCanvas] Resized to ${width}x${height}`);
     }
 
@@ -68,10 +114,13 @@ export class ViewerCanvas implements UIComponent {
      * Auto-resize canvas to fit its container
      */
     autoResize(): void {
-        const container = this.element;
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-        this.resize(width, height);
+        const rect = this.canvasWrapper.getBoundingClientRect();
+        const width = Math.floor(rect.width);
+        const height = Math.floor(rect.height);
+        
+        if (width > 0 && height > 0) {
+            this.resize(width, height);
+        }
     }
 
     render(): void {
@@ -79,6 +128,10 @@ export class ViewerCanvas implements UIComponent {
     }
 
     destroy(): void {
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
         this.element.remove();
     }
 }

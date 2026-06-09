@@ -1,0 +1,11 @@
+# Generated test mesh for PolyLab compression validation
+# Vertices: 4
+# Faces: 2
+
+v 0.000000 0.000000 0.000000
+v 1.000000 0.000000 0.000000
+v 0.500000 1.000000 0.000000
+v 0.500000 -1.000000 0.000000
+
+f 1 2 3
+f 1 4 2

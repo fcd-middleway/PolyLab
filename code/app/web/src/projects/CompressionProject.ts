@@ -3,6 +3,13 @@
  * 
  * Progressive mesh compression and decompression visualization.
  * Load meshes, compress them, and visualize compression results.
+ * 
+ * Pipeline stages:
+ * 1. Load: Load OBJ file
+ * 2. AIF: Convert to Already-Indexed Format
+ * 3. Pre-process: Topology analysis and validation
+ * 4. Simplify: Progressive edge collapse
+ * 5. Export: Export simplified mesh
  */
 
 import { BaseProject } from '../core/BaseProject';
@@ -10,17 +17,33 @@ import type { ProjectConfig } from '../core/types';
 import type { ScenePanel } from '../components/ScenePanel';
 import type { PropertiesPanel } from '../components/PropertiesPanel';
 import type { StatusBar } from '../components/StatusBar';
+import { CompressionPipelineBanner } from '../components/CompressionPipelineBanner';
+import { CompressionStageParameters } from '../components/CompressionStageParameters';
+import type { BatchTestResult } from '../components/CompressionPipelineBanner';
 import { appLogger, meshLogger } from '../utils/logger';
 
 export class CompressionProject extends BaseProject {
     private scenePanel: ScenePanel | null = null;
     private detailsPanel: PropertiesPanel | null = null;
     private statusBar: StatusBar | null = null;
+    private pipelineBanner: CompressionPipelineBanner | null = null;
+    private stageParameters: CompressionStageParameters | null = null;
     
     private currentMeshId: string | null = null;
+    private currentFilename: string | null = null;
+    private currentMeshContent: string | null = null; // OBJ content for re-processing
     private isCompressed: boolean = false;
     private compressionHandle: any = null; // CompressionHandle from WASM
-    private currentMetric: string = 'edge_length'; // Default metric
+    private currentMetric: string = 'EdgeLength'; // Default metric
+    
+    // Pipeline state tracking
+    private pipelineState = {
+        loaded: false,
+        aifConverted: false,
+        preprocessed: false,
+        simplified: false,
+        exported: false
+    };
     
     // Render modes
     private renderModes = {
@@ -98,6 +121,47 @@ export class CompressionProject extends BaseProject {
         this.scenePanel = scenePanel;
         this.detailsPanel = detailsPanel;
         this.statusBar = statusBar;
+        
+        // Create pipeline banner
+        this.pipelineBanner = new CompressionPipelineBanner();
+        
+        // Create stage parameters component
+        this.stageParameters = new CompressionStageParameters();
+        
+        // Register callbacks for banner interactions
+        this.pipelineBanner.onStageSelect((stageId) => {
+            // Show parameters for selected stage
+            if (this.stageParameters) {
+                this.stageParameters.showStage(stageId);
+            }
+            appLogger.debug('Stage selected', { stageId });
+        });
+        
+        this.pipelineBanner.onExecute(() => {
+            // Execute current selected stage
+            const stageId = this.pipelineBanner?.getSelectedStageId();
+            if (stageId && this.stageParameters) {
+                const params = this.stageParameters.getStageParameters(stageId);
+                this.executeStage(stageId, params);
+            }
+        });
+        
+        this.pipelineBanner.onExecuteAll(() => {
+            // Execute all remaining stages
+            this.executeAllStages();
+        });
+        
+        this.pipelineBanner.onBatchTest((targetStage) => {
+            // Run batch testing on all test assets
+            this.runBatchTest(targetStage);
+        });
+        
+        // Show initial stage parameters
+        if (this.stageParameters) {
+            this.stageParameters.showStage('load');
+        }
+        
+        appLogger.debug('Compression pipeline components initialized');
     }
 
     async init(viewer: any): Promise<void> {
@@ -142,57 +206,233 @@ export class CompressionProject extends BaseProject {
         // Update status bar
         if (this.statusBar) {
             this.statusBar.updateStats({ 
-                status: '📦 Mesh Compression - Load a mesh to begin'
+                status: '📦 Mesh Compression - Select a stage to configure'
             });
         }
         
-        // Clear Settings section (not used in Compression mode)
-        if (this.detailsPanel) {
-            this.detailsPanel.clearSettings();
+        // Inject pipeline banner into permanent container (above canvas-container)
+        // Reuse the terrain-banner-container from Perlin
+        const bannerContainer = document.getElementById('terrain-banner-container');
+        if (bannerContainer && this.pipelineBanner) {
+            bannerContainer.innerHTML = '';
+            bannerContainer.appendChild(this.pipelineBanner.element);
+            appLogger.debug('Compression pipeline banner injected');
+        }
+        
+        // Inject stage parameters into PropertiesPanel
+        if (this.detailsPanel && this.stageParameters) {
+            this.detailsPanel.element.querySelector('.panel-content')!.innerHTML = '';
+            this.detailsPanel.element.querySelector('.panel-content')!.appendChild(this.stageParameters.element);
+            appLogger.debug('Stage parameters injected into PropertiesPanel');
         }
     }
 
     onDeactivate(): void {
         appLogger.debug('Compression project deactivated');
         
-        // Clear Settings section when deactivating
+        // Clear pipeline banner from permanent container
+        const bannerContainer = document.getElementById('terrain-banner-container');
+        if (bannerContainer) {
+            bannerContainer.innerHTML = '';
+        }
+        
+        // Clear PropertiesPanel
         if (this.detailsPanel) {
-            this.detailsPanel.clearSettings();
+            this.detailsPanel.element.querySelector('.panel-content')!.innerHTML = '';
         }
     }
 
     /**
-     * Simplify the current mesh using edge collapse
+     * Execute a single stage of the compression pipeline
      */
-    private async compressMesh(): Promise<void> {
-        if (!this.currentMeshId || !this.compressionHandle) {
-            appLogger.warn('No mesh loaded to compress');
-            this.statusBar?.updateStats({ status: '⚠️ Load a mesh first' });
-            return;
+    private async executeStage(stageId: string, params: Record<string, any>): Promise<void> {
+        if (!this.viewer) {
+            throw new Error('Viewer not initialized');
+        }
+
+        meshLogger.info(`Executing stage: ${stageId}`, params);
+
+        // Mark stage as active
+        if (this.pipelineBanner) {
+            this.pipelineBanner.updateStageStatus(stageId, 'active');
         }
 
         try {
-            appLogger.info('Simplifying mesh...', { meshId: this.currentMeshId, metric: this.currentMetric });
-            this.statusBar?.updateStats({ status: '⚡ Simplifying...' });
+            switch (stageId) {
+                case 'load':
+                    // Load stage is triggered by file picker, so this just validates
+                    if (!this.pipelineState.loaded) {
+                        throw new Error('No mesh loaded yet. Use file picker to load an OBJ file.');
+                    }
+                    break;
+                case 'aif':
+                    await this.executeAIFStage();
+                    break;
+                case 'preprocess':
+                    await this.executePreprocessStage();
+                    break;
+                case 'simplify':
+                    await this.executeSimplifyStage(params);
+                    break;
+                case 'export':
+                    await this.executeExportStage(params);
+                    break;
+                default:
+                    throw new Error(`Unknown stage: ${stageId}`);
+            }
+
+            // Mark stage as completed
+            if (this.pipelineBanner) {
+                this.pipelineBanner.updateStageStatus(stageId, 'completed');
+            }
+
+            meshLogger.info(`Stage completed: ${stageId}`);
+        } catch (error) {
+            // Mark stage as failed
+            if (this.pipelineBanner) {
+                this.pipelineBanner.updateStageStatus(stageId, 'failed');
+            }
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            meshLogger.error(`Stage failed: ${stageId}`, { error: errorMsg });
+            this.statusBar?.updateStats({ status: `❌ ${stageId}: ${errorMsg}` });
+            throw error;
+        }
+    }
+
+    /**
+     * Execute all remaining stages
+     */
+    private async executeAllStages(): Promise<void> {
+        meshLogger.info('Executing all stages sequentially');
+
+        const stages = ['load', 'aif', 'preprocess', 'simplify', 'export'];
+        const selectedStageId = this.pipelineBanner?.getSelectedStageId();
+        const startIndex = selectedStageId ? stages.indexOf(selectedStageId) : 0;
+
+        for (let i = startIndex; i < stages.length; i++) {
+            const stageId = stages[i];
+            const params = this.stageParameters?.getStageParameters(stageId) || {};
             
-            // Simplify by 10% (keep 90% of vertices)
-            const result = this.compressionHandle.simplify_step(0.9, this.currentMetric);
+            try {
+                await this.executeStage(stageId, params);
+            } catch (error) {
+                // Stop execution on first error
+                meshLogger.error('Pipeline stopped due to error', { stageId });
+                return;
+            }
+        }
+
+        meshLogger.info('All stages completed successfully');
+        this.statusBar?.updateStats({ status: '✅ Pipeline completed' });
+    }
+
+    /**
+     * AIF conversion stage: Convert loaded mesh to Already-Indexed Format
+     */
+    private async executeAIFStage(): Promise<void> {
+        if (!this.pipelineState.loaded || !this.currentMeshContent) {
+            throw new Error('No mesh loaded. Load a mesh first.');
+        }
+
+        meshLogger.debug('Converting mesh to AIF format');
+        this.statusBar?.updateStats({ status: '🔄 Converting to AIF...' });
+
+        // Parse OBJ to get vertices and faces
+        const meshData = this.parseOBJ(this.currentMeshContent);
+        
+        // Load the AIF-based compression WASM module dynamically
+        try {
+            // @ts-ignore - WASM module
+            const compressionWasm = await import('../../../../crates/polylab-compression/pkg/polylab_compression.js');
+            await compressionWasm.default();
+            
+            // Create CompressionHandle with the mesh data
+            // Note: wasm-bindgen constructors use 'new', not '.new()'
+            this.compressionHandle = new compressionWasm.CompressionHandle(
+                this.currentMeshId || 'mesh',
+                meshData.vertices,
+                meshData.faces
+            );
+            
+            const stats = this.compressionHandle.get_stats();
+            this.pipelineState.aifConverted = true;
+            
+            this.statusBar?.updateStats({ 
+                status: '✅ AIF conversion complete',
+                vertices: stats.vertices,
+                triangles: stats.faces
+            });
+            
+            meshLogger.info('AIF conversion successful', { stats });
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            throw new Error(`AIF conversion failed: ${errorMsg}`);
+        }
+    }
+
+    /**
+     * Pre-process stage: Topology analysis and validation
+     * TODO: Implement actual topology validation (manifold detection, etc.)
+     */
+    private async executePreprocessStage(): Promise<void> {
+        if (!this.pipelineState.aifConverted || !this.compressionHandle) {
+            throw new Error('AIF not converted yet. Convert to AIF first.');
+        }
+
+        meshLogger.debug('Pre-processing mesh (topology analysis, validation)');
+        this.statusBar?.updateStats({ status: '🔍 Pre-processing...' });
+
+        // TODO: Call WASM functions for topology analysis
+        // For now, this is a placeholder
+        
+        // Simulate analysis delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        this.pipelineState.preprocessed = true;
+        
+        this.statusBar?.updateStats({ 
+            status: '✅ Pre-processing complete (manifold analysis pending)'
+        });
+        
+        meshLogger.info('Pre-processing complete (placeholder)');
+    }
+
+    /**
+     * Simplify stage: Progressive edge collapse simplification
+     */
+    private async executeSimplifyStage(params: Record<string, any>): Promise<void> {
+        if (!this.pipelineState.preprocessed || !this.compressionHandle) {
+            throw new Error('Pre-processing not done yet. Complete pre-processing first.');
+        }
+
+        const targetRatio = params.targetRatio || 0.9;
+        const metric = params.metric || 'EdgeLength';
+        
+        meshLogger.debug('Simplifying mesh', { targetRatio, metric });
+        this.statusBar?.updateStats({ status: '⚡ Simplifying...' });
+        
+        try {
+            // Perform simplification
+            const result = this.compressionHandle.simplify_step(targetRatio, metric);
             
             // Convert arrays to TypedArrays
             const verticesArray = new Float32Array(result.vertices);
             const facesArray = new Uint32Array(result.faces);
             
             // Update viewer with new geometry
-            this.viewer.update_mesh(
-                this.currentMeshId,
-                verticesArray,
-                facesArray
-            );
+            if (this.currentMeshId) {
+                this.viewer.update_mesh(
+                    this.currentMeshId,
+                    verticesArray,
+                    facesArray
+                );
+            }
             
-            // Update UI with new stats
+            this.pipelineState.simplified = true;
+            
+            // Display stats
             this.displayStats(result.stats);
             
-            // Update status bar
             const reduction = result.stats.original_vertices - result.stats.vertices;
             this.statusBar?.updateStats({ 
                 status: `⚡ Simplified: -${reduction} vertices`,
@@ -200,67 +440,327 @@ export class CompressionProject extends BaseProject {
                 triangles: result.stats.faces
             });
             
-            appLogger.info('Mesh simplified successfully', { 
+            meshLogger.info('Simplification complete', { 
                 vertices: result.stats.vertices,
                 reduction 
             });
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
-            appLogger.error('Failed to simplify mesh', { error: errorMsg });
-            this.statusBar?.updateStats({ status: `❌ ${errorMsg}` });
+            throw new Error(`Simplification failed: ${errorMsg}`);
         }
     }
 
     /**
-     * Reset the mesh to its original state
+     * Export stage: Export simplified mesh
+     */
+    private async executeExportStage(params: Record<string, any>): Promise<void> {
+        if (!this.pipelineState.simplified || !this.compressionHandle) {
+            throw new Error('Mesh not simplified yet. Simplify the mesh first.');
+        }
+
+        const format = params.format || 'obj';
+        
+        meshLogger.debug('Exporting mesh', { format });
+        this.statusBar?.updateStats({ status: '💾 Exporting...' });
+        
+        // TODO: Implement actual export (download OBJ file)
+        // For now, just mark as complete
+        
+        this.pipelineState.exported = true;
+        
+        this.statusBar?.updateStats({ 
+            status: '✅ Export ready (download feature WIP)'
+        });
+        
+        meshLogger.info('Export stage complete (placeholder)');
+    }
+
+    /**
+     * Run batch testing on all test assets
+     */
+    private async runBatchTest(targetStage: string): Promise<void> {
+        meshLogger.info('Starting batch test', { targetStage });
+        this.statusBar?.updateStats({ status: '🧪 Running batch test...' });
+        
+        const results: BatchTestResult[] = [];
+        const testAssets = this.getTestAssets();
+        
+        for (const asset of testAssets) {
+            try {
+                meshLogger.debug('Testing asset', { asset });
+                
+                // Load the test asset
+                const response = await fetch(`/test-assets/compression/${asset.category}/${asset.filename}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to load ${asset.filename}`);
+                }
+                const content = await response.text();
+                
+                // Reset pipeline state
+                this.resetPipelineState();
+                
+                // Load mesh
+                this.currentMeshContent = content;
+                this.currentFilename = asset.filename;
+                this.currentMeshId = `test-${Date.now()}`;
+                this.pipelineState.loaded = true;
+                
+                // Execute stages up to target
+                const stages = ['load', 'aif', 'preprocess', 'simplify', 'export'];
+                const stopIndex = stages.indexOf(targetStage);
+                
+                for (let i = 0; i <= stopIndex; i++) {
+                    const stageId = stages[i];
+                    const params = this.stageParameters?.getStageParameters(stageId) || {};
+                    await this.executeStage(stageId, params);
+                }
+                
+                // Get final stats
+                const stats = this.compressionHandle?.get_stats();
+                
+                results.push({
+                    meshName: asset.filename,
+                    success: true,
+                    stats: stats ? {
+                        vertices: stats.vertices,
+                        faces: stats.faces,
+                        edges: stats.edges
+                    } : undefined
+                });
+                
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                results.push({
+                    meshName: asset.filename,
+                    success: false,
+                    failedStage: targetStage,
+                    error: errorMsg
+                });
+                meshLogger.error('Batch test failed for asset', { asset, error: errorMsg });
+            }
+        }
+        
+        // Display results
+        if (this.pipelineBanner) {
+            this.pipelineBanner.displayBatchResults(results);
+        }
+        
+        const successCount = results.filter(r => r.success).length;
+        this.statusBar?.updateStats({ 
+            status: `🧪 Batch test complete: ${successCount}/${results.length} passed`
+        });
+        
+        meshLogger.info('Batch test complete', { 
+            total: results.length, 
+            success: successCount, 
+            failed: results.length - successCount 
+        });
+    }
+
+    /**
+     * Get list of test assets for batch testing
+     */
+    private getTestAssets(): Array<{ category: string; filename: string }> {
+        return [
+            // Manifold Simple
+            { category: 'manifold_simple', filename: 'triangle.obj' },
+            { category: 'manifold_simple', filename: 'quad.obj' },
+            { category: 'manifold_simple', filename: 'two_triangles.obj' },
+            { category: 'manifold_simple', filename: 'cube_tris.obj' },
+            { category: 'manifold_simple', filename: 'cube_quads.obj' },
+            { category: 'manifold_simple', filename: 'sphere_low.obj' },
+            // Non-Manifold
+            { category: 'non_manifold', filename: 't_junction.obj' },
+            { category: 'non_manifold', filename: 'pinch_point.obj' },
+            { category: 'non_manifold', filename: 'open_surface.obj' },
+            { category: 'non_manifold', filename: 'multiple_holes.obj' },
+            { category: 'non_manifold', filename: 'wing_edge.obj' },
+            // Degenerate
+            { category: 'degenerate', filename: 'zero_area_face.obj' },
+            { category: 'degenerate', filename: 'zero_length_edge.obj' },
+            { category: 'degenerate', filename: 'isolated_vertex.obj' },
+            // Polygonal
+            { category: 'polygonal', filename: 'pentagon.obj' },
+            { category: 'polygonal', filename: 'hexagon.obj' },
+            { category: 'polygonal', filename: 'quad_strip.obj' },
+            { category: 'polygonal', filename: 'mixed_valence.obj' }
+        ];
+    }
+
+    /**
+     * Reset pipeline state
+     */
+    private resetPipelineState(): void {
+        this.pipelineState = {
+            loaded: false,
+            aifConverted: false,
+            preprocessed: false,
+            simplified: false,
+            exported: false
+        };
+        
+        if (this.pipelineBanner) {
+            this.pipelineBanner.reset();
+        }
+    }
+
+    /**
+     * Parse OBJ content to extract vertices and faces
+     */
+    private parseOBJ(content: string): { vertices: Float32Array; faces: Uint32Array } {
+        const vertices: number[] = [];
+        const faces: number[] = [];
+        
+        const lines = content.split('\n');
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('v ')) {
+                // Vertex line
+                const parts = trimmed.split(/\s+/);
+                vertices.push(
+                    parseFloat(parts[1]),
+                    parseFloat(parts[2]),
+                    parseFloat(parts[3])
+                );
+            } else if (trimmed.startsWith('f ')) {
+                // Face line
+                const parts = trimmed.split(/\s+/).slice(1);
+                const indices = parts.map(p => {
+                    const idx = parseInt(p.split('/')[0]);
+                    return idx > 0 ? idx - 1 : vertices.length / 3 + idx;
+                });
+                
+                // Triangulate if needed (assuming convex polygons)
+                for (let i = 1; i < indices.length - 1; i++) {
+                    faces.push(indices[0], indices[i], indices[i + 1]);
+                }
+            }
+        }
+        
+        return {
+            vertices: new Float32Array(vertices),
+            faces: new Uint32Array(faces)
+        };
+    }
+
+    /**
+     * Handle mesh file loaded from file picker (inherited from BaseProject)
+     */
+    protected async onMeshFileLoaded(content: string, filename: string): Promise<void> {
+        try {
+            appLogger.info('[CompressionProject] Loading mesh from file picker', { filename, size: content.length });
+            this.statusBar?.updateStats({ status: `Loading ${filename}...` });
+            
+            // Remove old mesh if exists
+            if (this.currentMeshId && this.viewer) {
+                this.viewer.remove_mesh(this.currentMeshId);
+                this.scenePanel?.removeMesh(this.currentMeshId);
+            }
+            
+            // Reset pipeline state for new mesh
+            this.resetPipelineState();
+            
+            // Generate unique mesh ID
+            this.currentMeshId = `mesh-${Date.now()}`;
+            this.currentFilename = filename;
+            this.currentMeshContent = content; // Store for re-processing
+            
+            // Load mesh into viewer (display only)
+            this.viewer.load_mesh(this.currentMeshId, content);
+            
+            // Get mesh details
+            const details = this.viewer.mesh_details(this.currentMeshId);
+            const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
+            
+            // Add mesh to scene panel
+            this.scenePanel?.addMesh({
+                id: this.currentMeshId,
+                name: filename,
+                vertices: Math.round(vertices),
+                triangles: Math.round(triangles),
+                visible: true
+            });
+            
+            // Mark "load" stage as completed
+            this.pipelineState.loaded = true;
+            if (this.pipelineBanner) {
+                this.pipelineBanner.updateStageStatus('load', 'completed');
+            }
+            
+            // Update status bar
+            this.statusBar?.updateStats({ 
+                status: `✅ Loaded ${filename} - Ready for pipeline`,
+                vertices: Math.round(vertices),
+                triangles: Math.round(triangles)
+            });
+            
+            appLogger.info('[CompressionProject] Mesh loaded successfully', { 
+                meshId: this.currentMeshId,
+                vertices: Math.round(vertices),
+                triangles: Math.round(triangles)
+            });
+            
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            appLogger.error('[CompressionProject] Failed to load mesh', { error: errorMsg });
+            this.statusBar?.updateStats({ status: `❌ Error: ${errorMsg}` });
+        }
+    }
+
+    /**
+     * Simplify the current mesh (legacy toolbar button - delegates to pipeline)
+     */
+    private async compressMesh(): Promise<void> {
+        // Delegate to simplify stage
+        const params = this.stageParameters?.getStageParameters('simplify') || {};
+        await this.executeStage('simplify', params);
+    }
+
+    /**
+     * Reset the mesh to original (legacy toolbar button)
      */
     private async resetMesh(): Promise<void> {
-        if (!this.currentMeshId || !this.compressionHandle) {
+        if (!this.compressionHandle) {
             appLogger.warn('No mesh to reset');
             this.statusBar?.updateStats({ status: '⚠️ Load a mesh first' });
             return;
         }
 
         try {
-            appLogger.info('Resetting mesh...', { meshId: this.currentMeshId });
+            meshLogger.info('Resetting mesh');
             this.statusBar?.updateStats({ status: '🔄 Resetting...' });
             
-            // Reset to original mesh
             const result = this.compressionHandle.reset();
             
-            // Convert arrays to TypedArrays
             const verticesArray = new Float32Array(result.vertices);
             const facesArray = new Uint32Array(result.faces);
             
-            // Update viewer with original geometry
-            this.viewer.update_mesh(
-                this.currentMeshId,
-                verticesArray,
-                facesArray
-            );
+            if (this.currentMeshId) {
+                this.viewer.update_mesh(
+                    this.currentMeshId,
+                    verticesArray,
+                    facesArray
+                );
+            }
             
-            // Update UI with original stats
             this.displayStats(result.stats);
             
-            // Update status bar
             this.statusBar?.updateStats({ 
                 status: '🔄 Mesh reset to original',
                 vertices: result.stats.vertices,
                 triangles: result.stats.faces
             });
             
-            appLogger.info('Mesh reset successfully', { 
-                vertices: result.stats.vertices
-            });
+            meshLogger.info('Mesh reset successfully');
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
-            appLogger.error('Failed to reset mesh', { error: errorMsg });
+            meshLogger.error('Failed to reset mesh', { error: errorMsg });
             this.statusBar?.updateStats({ status: `❌ ${errorMsg}` });
         }
     }
 
     /**
-     * Display compression statistics in the properties panel
+     * Display compression statistics
      */
     private displayStats(stats: any): void {
         if (!this.detailsPanel) return;
@@ -304,7 +804,7 @@ export class CompressionProject extends BaseProject {
                         <span>${compressionPercent}%</span>
                     </div>
                     <div class="stats-row">
-                        <span>Collapsed Edges:</span>
+                        <span>Collapsed:</span>
                         <span>${stats.collapsed_edges.toLocaleString()}</span>
                     </div>
                     <div class="stats-row">
@@ -315,201 +815,33 @@ export class CompressionProject extends BaseProject {
             </div>
         `;
         
-        this.detailsPanel.setSettingsContent(statsHTML);
+        // Inject directly into PropertiesPanel content (no subsection)
+        const content = this.detailsPanel.element.querySelector('.panel-content');
+        if (content) {
+            // Find or create stats container after stage parameters
+            let statsContainer = content.querySelector('.compression-stats-container') as HTMLElement;
+            if (!statsContainer) {
+                statsContainer = document.createElement('div');
+                statsContainer.className = 'compression-stats-container';
+                content.appendChild(statsContainer);
+            }
+            statsContainer.innerHTML = statsHTML;
+        }
     }
 
     /**
-     * Decompress the current mesh
-     * TODO: Implement actual decompression logic (Sprint 3+)
-     */
-    private decompressMesh(): void {
-        appLogger.warn('Decompression not implemented yet');
-        this.statusBar?.updateStats({ status: '⚠️ Decompression coming in future update' });
-    }
-
-    /**
-     * Load mesh from content (called by FILE section callback)
+     * Load mesh from content (called by file callback)
      */
     private async loadMesh(content: string, filename: string): Promise<void> {
-        // Reuse existing implementation from onMeshFileLoaded
         await this.onMeshFileLoaded(content, filename);
     }
 
     /**
-     * Handle file load error (called by FILE section callback)
+     * Handle file load error
      */
     private handleLoadError(error: Error): void {
         const message = error.message || 'Unknown error loading mesh';
         appLogger.error('[CompressionProject] Failed to load mesh', error);
         this.statusBar?.updateStats({ status: `❌ Error: ${message}` });
-    }
-
-    /**
-     * Toggle a render mode (solid, wireframe, vertices)
-     * NOTE: This is now deprecated - render mode changes are handled by toolbar callbacks
-     */
-    private toggleRenderMode(mode: 'solid' | 'wireframe' | 'vertices'): void {
-        this.renderModes[mode] = !this.renderModes[mode];
-        
-        // Update viewer render modes
-        if (this.viewer) {
-            this.viewer.set_render_modes(
-                this.renderModes.solid,
-                this.renderModes.wireframe,
-                this.renderModes.vertices
-            );
-        }
-        
-        appLogger.info('Render mode toggled', { mode, enabled: this.renderModes[mode] });
-        this.statusBar?.updateStats({ 
-            status: `${mode} mode ${this.renderModes[mode] ? 'enabled' : 'disabled'}` 
-        });
-        
-        // Update menu labels (would need UI manager support - for now just log)
-        this.updateViewMenuLabels();
-    }
-
-    /**
-     * Update View menu labels based on current render modes
-     * TODO: Implement proper menu item update in UI manager
-     */
-    private updateViewMenuLabels(): void {
-        // This would need to be implemented in the UI manager
-        // For now, the menu labels are static
-        appLogger.debug('View menu labels need updating', this.renderModes);
-    }
-
-    /**
-     * Handle mesh file loaded from file picker (inherited from BaseProject)
-     */
-    protected async onMeshFileLoaded(content: string, filename: string): Promise<void> {
-        try {
-            appLogger.info('[CompressionProject] Loading mesh from file picker', { filename, size: content.length });
-            this.statusBar?.updateStats({ status: `Loading ${filename}...` });
-            
-            // Remove old mesh if exists
-            if (this.currentMeshId && this.viewer) {
-                this.viewer.remove_mesh(this.currentMeshId);
-                this.scenePanel?.removeMesh(this.currentMeshId);
-            }
-            
-            // Generate unique mesh ID
-            this.currentMeshId = `mesh-${Date.now()}`;
-            
-            // Call WASM function to load mesh
-            this.viewer.load_mesh(this.currentMeshId, content);
-            
-            // Get detailed mesh info from viewer
-            const details = this.viewer.mesh_details(this.currentMeshId);
-            const [vertices, triangles, sizeX, sizeY, sizeZ] = details;
-            
-            // Create compression handle
-            // First, we need to extract raw vertex and face data
-            // Parse OBJ to get raw data (we'll need to add a helper method)
-            const meshData = this.parseOBJForCompression(content);
-            
-            this.compressionHandle = this.viewer.create_compression_handle(
-                this.currentMeshId,
-                meshData.vertices,
-                meshData.faces
-            );
-            
-            appLogger.info('[CompressionProject] Compression handle created', { 
-                meshId: this.currentMeshId,
-                vertices: meshData.vertices.length / 3,
-                faces: meshData.faces.length / 3
-            });
-            
-            // Add mesh to MeshPanel
-            this.scenePanel?.addMesh({
-                id: this.currentMeshId,
-                name: filename,
-                vertices: Math.round(vertices),
-                triangles: Math.round(triangles),
-                visible: true
-            });
-            
-            // Get initial stats from compression handle
-            const stats = this.compressionHandle.get_stats();
-            this.displayStats(stats);
-            
-            // Update status bar
-            this.statusBar?.updateStats({ 
-                status: `✅ Loaded ${filename} - Ready to simplify`,
-                vertices: Math.round(vertices),
-                triangles: Math.round(triangles)
-            });
-            
-            // Reset compression state
-            this.isCompressed = false;
-            
-            // Initialize render modes (solid only by default)
-            appLogger.info('[CompressionProject] Initializing render modes', this.renderModes);
-            this.viewer.set_render_modes(
-                this.renderModes.solid,
-                this.renderModes.wireframe,
-                this.renderModes.vertices
-            );
-            
-            appLogger.info('[CompressionProject] Mesh loaded successfully', { 
-                meshId: this.currentMeshId,
-                filename, 
-                vertices: Math.round(vertices), 
-                triangles: Math.round(triangles)
-            });
-        } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            appLogger.error('[CompressionProject] Failed to load mesh', { filename, error: errorMsg });
-            this.statusBar?.updateStats({ status: `❌ ${errorMsg}` });
-        }
-    }
-
-    /**
-     * Parse OBJ file to extract raw vertex and face data for compression
-     */
-    private parseOBJForCompression(content: string): { vertices: Float32Array, faces: Uint32Array } {
-        const lines = content.split('\n');
-        const vertices: number[] = [];
-        const faces: number[] = [];
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-            
-            // Vertex position
-            if (trimmed.startsWith('v ')) {
-                const parts = trimmed.split(/\s+/);
-                vertices.push(
-                    parseFloat(parts[1]),
-                    parseFloat(parts[2]),
-                    parseFloat(parts[3])
-                );
-            }
-            // Face (triangular only for now)
-            else if (trimmed.startsWith('f ')) {
-                const parts = trimmed.split(/\s+/);
-                if (parts.length === 4) { // Triangle
-                    for (let i = 1; i <= 3; i++) {
-                        // Handle "v/vt/vn" or "v//vn" or just "v"
-                        const vertexIndex = parseInt(parts[i].split('/')[0]) - 1; // OBJ indices are 1-based
-                        faces.push(vertexIndex);
-                    }
-                } else if (parts.length === 5) { // Quad - triangulate
-                    // Split quad into two triangles: (0,1,2) and (0,2,3)
-                    const indices = [
-                        parseInt(parts[1].split('/')[0]) - 1,
-                        parseInt(parts[2].split('/')[0]) - 1,
-                        parseInt(parts[3].split('/')[0]) - 1,
-                        parseInt(parts[4].split('/')[0]) - 1
-                    ];
-                    faces.push(indices[0], indices[1], indices[2]);
-                    faces.push(indices[0], indices[2], indices[3]);
-                }
-            }
-        }
-
-        return {
-            vertices: new Float32Array(vertices),
-            faces: new Uint32Array(faces)
-        };
     }
 }

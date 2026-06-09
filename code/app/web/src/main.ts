@@ -23,6 +23,7 @@ import './styles/statusbar.css';
 import './styles/help.css';
 import './styles/terrain-pipeline-banner.css';
 import './styles/rover-layouts.css';
+import './styles/compression-pipeline-banner.css';
 
 /**
  * Initialize the UI components
@@ -154,6 +155,9 @@ async function main() {
     
     try {
         const viewer = await initializeViewer(canvas, ui.statusBar);
+        
+        // Pass viewer reference to ViewerCanvas for automatic resize notifications
+        ui.viewerCanvas.setViewer(viewer);
 
         // ========================
         // Camera Controls Setup
